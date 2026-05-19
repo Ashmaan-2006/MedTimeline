@@ -16,3 +16,16 @@ Build the MVP patient timeline app:
 3. Generate summaries.
 4. Display longitudinal patient timeline events.
 
+## Development
+
+Copy the example environment file before starting local services:
+
+```bash
+cp .env.example .env
+```
+
+Start the frontend, backend, and PostgreSQL services:
+
+```bash
+docker compose up --build
+```

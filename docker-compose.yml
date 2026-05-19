@@ -1,0 +1,52 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend:/app/frontend
+      - ./package.json:/app/package.json:ro
+      - frontend_node_modules:/app/frontend/node_modules
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://medgraph:medgraph@postgres:5432/medgraph}
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-medgraph}
+      POSTGRES_USER: ${POSTGRES_USER:-medgraph}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medgraph}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medgraph} -d ${POSTGRES_DB:-medgraph}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  frontend_node_modules:
+  postgres_data:
+
