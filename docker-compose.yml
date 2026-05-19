@@ -23,7 +23,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://medgraph:medgraph@postgres:5432/medgraph}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://medgraph:medgraph@postgres:5432/medgraph}
     volumes:
       - ./backend:/app/backend
     depends_on:
