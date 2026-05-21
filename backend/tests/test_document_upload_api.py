@@ -68,6 +68,17 @@ class FakeDocumentRepository:
         self.documents.append(document)
         return document
 
+    def list_for_patient(
+        self,
+        patient_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[FakeDocument]:
+        matching_documents = [
+            document for document in self.documents if document.patient_id == patient_id
+        ]
+        return matching_documents[skip : skip + limit]
+
     def update_processing(
         self,
         document: FakeDocument,
@@ -169,6 +180,41 @@ def test_upload_patient_document(
     assert len(timeline_event_repository.events) == 1
     assert timeline_event_repository.events[0].event_type == "symptom"
     assert timeline_event_repository.events[0].source_document_id == document_repository.documents[0].id
+
+
+def test_list_patient_documents(
+    client: TestClient,
+    patient: FakePatient,
+    document_repository: FakeDocumentRepository,
+) -> None:
+    now = datetime.now(UTC)
+    document_repository.documents.append(
+        FakeDocument(
+            id=uuid4(),
+            patient_id=patient.id,
+            filename="note.txt",
+            content_type="text/plain",
+            storage_path="storage/uploads/note.txt",
+            extracted_text="Patient reports chest discomfort.",
+            summary="Patient reports chest discomfort.",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+
+    response = client.get(f"/patients/{patient.id}/documents")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["filename"] == "note.txt"
+    assert body[0]["summary"] == "Patient reports chest discomfort."
+
+
+def test_list_patient_documents_returns_404_for_missing_patient(client: TestClient) -> None:
+    response = client.get(f"/patients/{uuid4()}/documents")
+
+    assert response.status_code == 404
 
 
 def test_upload_patient_document_returns_404_for_missing_patient(client: TestClient) -> None:

@@ -1,3 +1,6 @@
+from uuid import UUID
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from medgraph_api.models.document import Document
@@ -14,6 +17,21 @@ class DocumentRepository:
         self.db.commit()
         self.db.refresh(document)
         return document
+
+    def list_for_patient(
+        self,
+        patient_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[Document]:
+        statement = (
+            select(Document)
+            .where(Document.patient_id == patient_id)
+            .order_by(Document.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(self.db.scalars(statement).all())
 
     def update_processing(
         self,

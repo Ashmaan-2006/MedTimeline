@@ -39,6 +39,21 @@ TimelineExtractionService = Annotated[
 ]
 
 
+@router.get("", response_model=list[DocumentUploadRead])
+def list_patient_documents(
+    patient_id: UUID,
+    patients: PatientRepo,
+    documents: DocumentRepo,
+    skip: int = 0,
+    limit: int = 100,
+) -> list[DocumentUploadRead]:
+    patient = patients.get(patient_id)
+    if patient is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found.")
+
+    return documents.list_for_patient(patient_id=patient_id, skip=skip, limit=limit)
+
+
 @router.post("", response_model=DocumentUploadRead, status_code=status.HTTP_201_CREATED)
 def upload_patient_document(
     patient_id: UUID,

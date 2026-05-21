@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { DocumentUploadForm } from "@/components/document-upload-form";
-import { getPatient, getPatientTimelineEvents } from "@/lib/api";
+import { getPatient, getPatientDocuments, getPatientTimelineEvents } from "@/lib/api";
 
 type PatientProfilePageProps = {
   params: Promise<{
@@ -44,8 +44,9 @@ function formatEventType(value: string) {
 
 export default async function PatientProfilePage({ params }: PatientProfilePageProps) {
   const { patientId } = await params;
-  const [patient, timelineEvents] = await Promise.all([
+  const [patient, documents, timelineEvents] = await Promise.all([
     getPatient(patientId),
+    getPatientDocuments(patientId),
     getPatientTimelineEvents(patientId),
   ]);
 
@@ -54,6 +55,7 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
   }
 
   const patientName = `${patient.first_name} ${patient.last_name}`;
+  const patientDocuments = documents ?? [];
   const events = timelineEvents ?? [];
 
   return (
@@ -74,8 +76,8 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
 
       <section className="metric-row" aria-label="Patient metrics">
         <div className="metric">
-          <div className="metric-label">Timeline Events</div>
-          <div className="metric-value">{events.length}</div>
+          <div className="metric-label">Documents</div>
+          <div className="metric-value">{patientDocuments.length}</div>
         </div>
         <div className="metric">
           <div className="metric-label">Date of Birth</div>
@@ -115,6 +117,25 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
       <section className="panel upload-panel">
         <h2 className="panel-title">Upload Document</h2>
         <DocumentUploadForm patientId={patient.id} />
+      </section>
+
+      <section className="panel document-panel">
+        <h2 className="panel-title">Extracted Summaries</h2>
+        {patientDocuments.length > 0 ? (
+          <div className="document-summary-list">
+            {patientDocuments.map((document) => (
+              <article className="document-summary" key={document.id}>
+                <div className="document-summary-header">
+                  <h3>{document.filename}</h3>
+                  <time>{formatDateTime(document.created_at)}</time>
+                </div>
+                <p>{document.summary ?? "No summary was generated for this document."}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">Uploaded document summaries will appear here.</div>
+        )}
       </section>
 
       <section className="panel timeline-panel">

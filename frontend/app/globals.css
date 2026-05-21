@@ -318,6 +318,47 @@ select {
   color: var(--danger);
 }
 
+.document-panel {
+  margin-top: 16px;
+}
+
+.document-summary-list {
+  display: grid;
+  gap: 14px;
+}
+
+.document-summary {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.document-summary-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.document-summary h3 {
+  font-size: 15px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.document-summary time {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 13px;
+}
+
+.document-summary p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
 .timeline-panel {
   margin-top: 16px;
 }
@@ -400,5 +441,10 @@ select {
   .upload-form {
     align-items: stretch;
     grid-template-columns: 1fr;
+  }
+
+  .document-summary-header {
+    align-items: start;
+    flex-direction: column;
   }
 }

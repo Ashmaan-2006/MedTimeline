@@ -27,6 +27,18 @@ export type TimelineEvent = {
   updated_at: string;
 };
 
+export type PatientDocument = {
+  id: string;
+  patient_id: string;
+  filename: string;
+  content_type: string | null;
+  storage_path: string;
+  extracted_text: string | null;
+  summary: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 async function fetchJson<T>(path: string): Promise<T | null> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: "no-store",
@@ -53,3 +65,6 @@ export function getPatientTimelineEvents(patientId: string): Promise<TimelineEve
   );
 }
 
+export function getPatientDocuments(patientId: string): Promise<PatientDocument[] | null> {
+  return fetchJson<PatientDocument[]>(`/patients/${encodeURIComponent(patientId)}/documents?limit=25`);
+}
