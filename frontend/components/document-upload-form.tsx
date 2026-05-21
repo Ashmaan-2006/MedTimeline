@@ -4,17 +4,25 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useRef, useState } from "react";
 
 type DocumentUploadFormProps = {
-  patientId: string;
+  patientId?: string;
 };
 
 export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [patientIdInput, setPatientIdInput] = useState("");
   const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const resolvedPatientId = patientId ?? patientIdInput.trim();
+    if (resolvedPatientId.length === 0) {
+      setStatus("error");
+      setMessage("Enter a patient UUID before uploading.");
+      return;
+    }
 
     const file = fileInputRef.current?.files?.[0];
     if (file === undefined) {
@@ -29,7 +37,7 @@ export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
     setStatus("uploading");
     setMessage(null);
 
-    const response = await fetch(`/api/patients/${patientId}/documents`, {
+    const response = await fetch(`/api/patients/${resolvedPatientId}/documents`, {
       method: "POST",
       body: formData,
     });
@@ -50,6 +58,22 @@ export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
 
   return (
     <form className="upload-form" onSubmit={handleSubmit}>
+      {patientId === undefined ? (
+        <div className="patient-id-field">
+          <label className="upload-label" htmlFor="upload-patient-id">
+            Patient UUID
+          </label>
+          <input
+            className="text-input"
+            disabled={status === "uploading"}
+            id="upload-patient-id"
+            onChange={(event) => setPatientIdInput(event.target.value)}
+            placeholder="Paste an existing patient UUID"
+            type="text"
+            value={patientIdInput}
+          />
+        </div>
+      ) : null}
       <label className="upload-label" htmlFor="patient-document">
         Clinical document
       </label>
@@ -73,4 +97,3 @@ export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
     </form>
   );
 }
-

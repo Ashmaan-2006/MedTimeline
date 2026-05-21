@@ -1,3 +1,5 @@
+import { DocumentUploadForm } from "@/components/document-upload-form";
+
 export default function HomePage() {
   return (
     <>
@@ -33,10 +35,9 @@ export default function HomePage() {
         </div>
         <div className="panel">
           <h2 className="panel-title">Document Processing</h2>
-          <div className="empty-state">Uploaded records and extraction status will appear here.</div>
+          <DocumentUploadForm />
         </div>
       </section>
     </>
   );
 }
-

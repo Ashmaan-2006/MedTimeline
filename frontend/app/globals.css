@@ -275,6 +275,12 @@ select {
   grid-template-columns: minmax(220px, 1fr) auto;
 }
 
+.patient-id-field {
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
 .upload-label {
   color: var(--muted);
   font-size: 13px;
@@ -289,6 +295,16 @@ select {
   color: var(--foreground);
   min-height: 42px;
   padding: 9px 10px;
+}
+
+.text-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  min-height: 42px;
+  padding: 9px 10px;
+  width: 100%;
 }
 
 .primary-button {
