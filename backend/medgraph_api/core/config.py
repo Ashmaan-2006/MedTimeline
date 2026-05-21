@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://medgraph:medgraph@postgres:5432/medgraph"
+    upload_dir: str = "storage/uploads"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -12,4 +13,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
