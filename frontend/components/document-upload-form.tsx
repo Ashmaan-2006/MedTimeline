@@ -7,6 +7,9 @@ type DocumentUploadFormProps = {
   patientId?: string;
 };
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -21,6 +24,12 @@ export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
     if (resolvedPatientId.length === 0) {
       setStatus("error");
       setMessage("Enter a patient UUID before uploading.");
+      return;
+    }
+
+    if (!UUID_PATTERN.test(resolvedPatientId)) {
+      setStatus("error");
+      setMessage("Enter a valid patient UUID. Create a patient first, then paste its ID here.");
       return;
     }
 
@@ -44,7 +53,11 @@ export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
 
     if (!response.ok) {
       setStatus("error");
-      setMessage("Upload failed. Check the backend service and try again.");
+      if (response.status === 404) {
+        setMessage("No patient exists with that UUID.");
+      } else {
+        setMessage("Upload failed. Check the backend service and try again.");
+      }
       return;
     }
 
