@@ -10,9 +10,11 @@ from medgraph_api.api.deps import (
     get_document_repository,
     get_patient_repository,
     get_upload_storage,
+    get_timeline_event_repository,
 )
 from medgraph_api.main import app
 from medgraph_api.schemas.document import DocumentCreate, DocumentProcessingUpdate
+from medgraph_api.schemas.timeline_event import TimelineEventCreate
 from medgraph_api.services.storage import LocalUploadStorage
 
 
@@ -77,6 +79,15 @@ class FakeDocumentRepository:
         return document
 
 
+class FakeTimelineEventRepository:
+    def __init__(self) -> None:
+        self.events: list[TimelineEventCreate] = []
+
+    def create_many(self, payloads: list[TimelineEventCreate]) -> list[TimelineEventCreate]:
+        self.events.extend(payloads)
+        return payloads
+
+
 @pytest.fixture
 def patient() -> FakePatient:
     now = datetime.now(UTC)
@@ -96,10 +107,16 @@ def document_repository() -> FakeDocumentRepository:
 
 
 @pytest.fixture
+def timeline_event_repository() -> FakeTimelineEventRepository:
+    return FakeTimelineEventRepository()
+
+
+@pytest.fixture
 def client(
     tmp_path,
     patient: FakePatient,
     document_repository: FakeDocumentRepository,
+    timeline_event_repository: FakeTimelineEventRepository,
 ) -> Iterator[TestClient]:
     repository = FakePatientRepository(patient)
     storage = LocalUploadStorage(upload_dir=str(tmp_path / "uploads"))
@@ -113,8 +130,12 @@ def client(
     def override_document_repository() -> Iterator[FakeDocumentRepository]:
         yield document_repository
 
+    def override_timeline_event_repository() -> Iterator[FakeTimelineEventRepository]:
+        yield timeline_event_repository
+
     app.dependency_overrides[get_patient_repository] = override_patient_repository
     app.dependency_overrides[get_document_repository] = override_document_repository
+    app.dependency_overrides[get_timeline_event_repository] = override_timeline_event_repository
     app.dependency_overrides[get_upload_storage] = override_upload_storage
     try:
         yield TestClient(app)
@@ -126,6 +147,7 @@ def test_upload_patient_document(
     client: TestClient,
     patient: FakePatient,
     document_repository: FakeDocumentRepository,
+    timeline_event_repository: FakeTimelineEventRepository,
 ) -> None:
     response = client.post(
         f"/patients/{patient.id}/documents",
@@ -144,6 +166,9 @@ def test_upload_patient_document(
     assert len(document_repository.documents) == 1
     assert document_repository.documents[0].storage_path == body["storage_path"]
     assert document_repository.documents[0].summary == body["summary"]
+    assert len(timeline_event_repository.events) == 1
+    assert timeline_event_repository.events[0].event_type == "symptom"
+    assert timeline_event_repository.events[0].source_document_id == document_repository.documents[0].id
 
 
 def test_upload_patient_document_returns_404_for_missing_patient(client: TestClient) -> None:
