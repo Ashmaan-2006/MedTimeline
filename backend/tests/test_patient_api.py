@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from medgraph_api.api.deps import get_patient_repository
+from medgraph_api.api.deps import get_patient_repository, get_timeline_event_repository
 from medgraph_api.main import app
 from medgraph_api.schemas.patient import PatientCreate, PatientUpdate
 
@@ -61,14 +61,59 @@ class FakePatientRepository:
         self.patients.pop(patient.id, None)
 
 
+@dataclass
+class FakeTimelineEvent:
+    id: UUID
+    patient_id: UUID
+    source_document_id: UUID | None
+    occurred_at: datetime | None
+    event_type: str
+    title: str
+    description: str | None
+    evidence_text: str | None
+    confidence: float | None
+    event_metadata: dict | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class FakeTimelineEventRepository:
+    def __init__(self) -> None:
+        self.events: list[FakeTimelineEvent] = []
+        self.last_skip: int | None = None
+        self.last_limit: int | None = None
+
+    def list_for_patient(
+        self,
+        patient_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[FakeTimelineEvent]:
+        self.last_skip = skip
+        self.last_limit = limit
+        matching_events = [event for event in self.events if event.patient_id == patient_id]
+        return matching_events[skip : skip + limit]
+
+
 @pytest.fixture
-def fake_patient_repository() -> Iterator[FakePatientRepository]:
+def fake_timeline_event_repository() -> FakeTimelineEventRepository:
+    return FakeTimelineEventRepository()
+
+
+@pytest.fixture
+def fake_patient_repository(
+    fake_timeline_event_repository: FakeTimelineEventRepository,
+) -> Iterator[FakePatientRepository]:
     repository = FakePatientRepository()
 
     def override_patient_repository() -> Iterator[FakePatientRepository]:
         yield repository
 
+    def override_timeline_event_repository() -> Iterator[FakeTimelineEventRepository]:
+        yield fake_timeline_event_repository
+
     app.dependency_overrides[get_patient_repository] = override_patient_repository
+    app.dependency_overrides[get_timeline_event_repository] = override_timeline_event_repository
     try:
         yield repository
     finally:
@@ -174,3 +219,50 @@ def test_get_missing_patient_returns_404(client: TestClient) -> None:
 
     assert response.status_code == 404
 
+
+def test_list_patient_timeline_events(
+    client: TestClient,
+    fake_timeline_event_repository: FakeTimelineEventRepository,
+) -> None:
+    created = client.post(
+        "/patients",
+        json={
+            "medical_record_number": "MRN-006",
+            "first_name": "Iris",
+            "last_name": "Khan",
+        },
+    ).json()
+    patient_id = UUID(created["id"])
+    now = datetime.now(UTC)
+    fake_timeline_event_repository.events.append(
+        FakeTimelineEvent(
+            id=uuid4(),
+            patient_id=patient_id,
+            source_document_id=None,
+            occurred_at=now,
+            event_type="symptom",
+            title="Patient reports chest discomfort.",
+            description="Patient reports chest discomfort.",
+            evidence_text="Patient reports chest discomfort.",
+            confidence=0.65,
+            event_metadata={"extractor": "basic_keyword_v1"},
+            created_at=now,
+            updated_at=now,
+        )
+    )
+
+    response = client.get(f"/patients/{patient_id}/timeline-events?skip=0&limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["event_type"] == "symptom"
+    assert body[0]["title"] == "Patient reports chest discomfort."
+    assert fake_timeline_event_repository.last_skip == 0
+    assert fake_timeline_event_repository.last_limit == 10
+
+
+def test_list_patient_timeline_events_returns_404_for_missing_patient(client: TestClient) -> None:
+    response = client.get(f"/patients/{uuid4()}/timeline-events")
+
+    assert response.status_code == 404

@@ -1,3 +1,6 @@
+from uuid import UUID
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from medgraph_api.models.timeline_event import TimelineEvent
@@ -18,3 +21,20 @@ class TimelineEventRepository:
 
         return events
 
+    def list_for_patient(
+        self,
+        patient_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[TimelineEvent]:
+        statement = (
+            select(TimelineEvent)
+            .where(TimelineEvent.patient_id == patient_id)
+            .order_by(
+                TimelineEvent.occurred_at.asc().nullslast(),
+                TimelineEvent.created_at.asc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(self.db.scalars(statement).all())
