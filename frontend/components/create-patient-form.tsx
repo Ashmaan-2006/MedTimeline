@@ -8,6 +8,10 @@ type CreatePatientFormProps = {
   onPatientCreated: (patient: Patient) => void;
 };
 
+type ApiError = {
+  detail?: string;
+};
+
 export function CreatePatientForm({ onPatientCreated }: CreatePatientFormProps) {
   const [status, setStatus] = useState<"idle" | "creating" | "success" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -48,7 +52,12 @@ export function CreatePatientForm({ onPatientCreated }: CreatePatientFormProps) 
 
     if (!response.ok) {
       setStatus("error");
-      setMessage(response.status === 409 ? "A patient with that MRN already exists." : "Patient creation failed.");
+      const error = (await response.json().catch(() => null)) as ApiError | null;
+      setMessage(
+        response.status === 409
+          ? "A patient with that MRN already exists."
+          : error?.detail ?? "Patient creation failed. Check that the backend service is running.",
+      );
       return;
     }
 
@@ -98,4 +107,3 @@ export function CreatePatientForm({ onPatientCreated }: CreatePatientFormProps) 
     </form>
   );
 }
-
