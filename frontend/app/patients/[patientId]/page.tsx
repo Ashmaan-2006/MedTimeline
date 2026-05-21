@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { DocumentUploadForm } from "@/components/document-upload-form";
 import { getPatient, getPatientTimelineEvents } from "@/lib/api";
 
 type PatientProfilePageProps = {
@@ -111,6 +112,11 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
         </div>
       </section>
 
+      <section className="panel upload-panel">
+        <h2 className="panel-title">Upload Document</h2>
+        <DocumentUploadForm patientId={patient.id} />
+      </section>
+
       <section className="panel timeline-panel">
         <h2 className="panel-title">Timeline Events</h2>
         {events.length > 0 ? (
@@ -136,4 +142,3 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
     </>
   );
 }
-

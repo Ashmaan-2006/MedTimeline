@@ -264,6 +264,60 @@ select {
   margin: 0;
 }
 
+.upload-panel {
+  margin-top: 16px;
+}
+
+.upload-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) auto;
+}
+
+.upload-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  grid-column: 1 / -1;
+}
+
+.file-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  min-height: 42px;
+  padding: 9px 10px;
+}
+
+.primary-button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 42px;
+  padding: 0 16px;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.form-message {
+  color: var(--success);
+  font-size: 13px;
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.form-message-error {
+  color: var(--danger);
+}
+
 .timeline-panel {
   margin-top: 16px;
 }
@@ -341,5 +395,10 @@ select {
   .topbar {
     padding-left: 20px;
     padding-right: 20px;
+  }
+
+  .upload-form {
+    align-items: stretch;
+    grid-template-columns: 1fr;
   }
 }
