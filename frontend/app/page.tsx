@@ -1,4 +1,4 @@
-import { DocumentUploadForm } from "@/components/document-upload-form";
+import { HomeWorkspace } from "@/components/home-workspace";
 
 export default function HomePage() {
   return (
@@ -28,16 +28,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="workspace-grid">
-        <div className="panel">
-          <h2 className="panel-title">Recent Patients</h2>
-          <div className="empty-state">Patient profile views will appear here.</div>
-        </div>
-        <div className="panel">
-          <h2 className="panel-title">Document Processing</h2>
-          <DocumentUploadForm />
-        </div>
-      </section>
+      <HomeWorkspace />
     </>
   );
 }

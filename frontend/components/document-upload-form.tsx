@@ -5,12 +5,16 @@ import { FormEvent, useRef, useState } from "react";
 
 type DocumentUploadFormProps = {
   patientId?: string;
+  showPatientIdField?: boolean;
 };
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
+export function DocumentUploadForm({
+  patientId,
+  showPatientIdField = true,
+}: DocumentUploadFormProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [patientIdInput, setPatientIdInput] = useState("");
@@ -23,7 +27,11 @@ export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
     const resolvedPatientId = patientId ?? patientIdInput.trim();
     if (resolvedPatientId.length === 0) {
       setStatus("error");
-      setMessage("Enter a patient UUID before uploading.");
+      setMessage(
+        showPatientIdField
+          ? "Enter a patient UUID before uploading."
+          : "Create a patient before uploading a document.",
+      );
       return;
     }
 
@@ -71,7 +79,7 @@ export function DocumentUploadForm({ patientId }: DocumentUploadFormProps) {
 
   return (
     <form className="upload-form" onSubmit={handleSubmit}>
-      {patientId === undefined ? (
+      {patientId === undefined && showPatientIdField ? (
         <div className="patient-id-field">
           <label className="upload-label" htmlFor="upload-patient-id">
             Patient UUID
