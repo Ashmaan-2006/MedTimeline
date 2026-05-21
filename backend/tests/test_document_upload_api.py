@@ -6,8 +6,13 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from medgraph_api.api.deps import get_patient_repository, get_upload_storage
+from medgraph_api.api.deps import (
+    get_document_repository,
+    get_patient_repository,
+    get_upload_storage,
+)
 from medgraph_api.main import app
+from medgraph_api.schemas.document import DocumentCreate
 from medgraph_api.services.storage import LocalUploadStorage
 
 
@@ -31,6 +36,37 @@ class FakePatientRepository:
         return None
 
 
+@dataclass
+class FakeDocument:
+    id: UUID
+    patient_id: UUID
+    filename: str
+    content_type: str | None
+    storage_path: str
+    extracted_text: str | None
+    summary: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class FakeDocumentRepository:
+    def __init__(self) -> None:
+        self.documents: list[FakeDocument] = []
+
+    def create(self, payload: DocumentCreate) -> FakeDocument:
+        now = datetime.now(UTC)
+        document = FakeDocument(
+            id=uuid4(),
+            extracted_text=None,
+            summary=None,
+            created_at=now,
+            updated_at=now,
+            **payload.model_dump(),
+        )
+        self.documents.append(document)
+        return document
+
+
 @pytest.fixture
 def patient() -> FakePatient:
     now = datetime.now(UTC)
@@ -45,7 +81,16 @@ def patient() -> FakePatient:
 
 
 @pytest.fixture
-def client(tmp_path, patient: FakePatient) -> Iterator[TestClient]:
+def document_repository() -> FakeDocumentRepository:
+    return FakeDocumentRepository()
+
+
+@pytest.fixture
+def client(
+    tmp_path,
+    patient: FakePatient,
+    document_repository: FakeDocumentRepository,
+) -> Iterator[TestClient]:
     repository = FakePatientRepository(patient)
     storage = LocalUploadStorage(upload_dir=str(tmp_path / "uploads"))
 
@@ -55,7 +100,11 @@ def client(tmp_path, patient: FakePatient) -> Iterator[TestClient]:
     def override_upload_storage() -> LocalUploadStorage:
         return storage
 
+    def override_document_repository() -> Iterator[FakeDocumentRepository]:
+        yield document_repository
+
     app.dependency_overrides[get_patient_repository] = override_patient_repository
+    app.dependency_overrides[get_document_repository] = override_document_repository
     app.dependency_overrides[get_upload_storage] = override_upload_storage
     try:
         yield TestClient(app)
@@ -63,7 +112,11 @@ def client(tmp_path, patient: FakePatient) -> Iterator[TestClient]:
         app.dependency_overrides.clear()
 
 
-def test_upload_patient_document(client: TestClient, patient: FakePatient) -> None:
+def test_upload_patient_document(
+    client: TestClient,
+    patient: FakePatient,
+    document_repository: FakeDocumentRepository,
+) -> None:
     response = client.post(
         f"/patients/{patient.id}/documents",
         files={"file": ("note.txt", b"Patient reports chest discomfort.", "text/plain")},
@@ -71,11 +124,15 @@ def test_upload_patient_document(client: TestClient, patient: FakePatient) -> No
 
     assert response.status_code == 201
     body = response.json()
+    assert body["id"]
     assert body["patient_id"] == str(patient.id)
     assert body["filename"] == "note.txt"
     assert body["content_type"] == "text/plain"
-    assert body["size_bytes"] == 33
     assert body["storage_path"].endswith("note.txt")
+    assert body["extracted_text"] is None
+    assert body["summary"] is None
+    assert len(document_repository.documents) == 1
+    assert document_repository.documents[0].storage_path == body["storage_path"]
 
 
 def test_upload_patient_document_returns_404_for_missing_patient(client: TestClient) -> None:
