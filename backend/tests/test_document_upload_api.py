@@ -12,7 +12,7 @@ from medgraph_api.api.deps import (
     get_upload_storage,
 )
 from medgraph_api.main import app
-from medgraph_api.schemas.document import DocumentCreate
+from medgraph_api.schemas.document import DocumentCreate, DocumentProcessingUpdate
 from medgraph_api.services.storage import LocalUploadStorage
 
 
@@ -64,6 +64,16 @@ class FakeDocumentRepository:
             **payload.model_dump(),
         )
         self.documents.append(document)
+        return document
+
+    def update_processing(
+        self,
+        document: FakeDocument,
+        payload: DocumentProcessingUpdate,
+    ) -> FakeDocument:
+        document.extracted_text = payload.extracted_text
+        document.summary = payload.summary
+        document.updated_at = datetime.now(UTC)
         return document
 
 
@@ -129,10 +139,11 @@ def test_upload_patient_document(
     assert body["filename"] == "note.txt"
     assert body["content_type"] == "text/plain"
     assert body["storage_path"].endswith("note.txt")
-    assert body["extracted_text"] is None
-    assert body["summary"] is None
+    assert body["extracted_text"] == "Patient reports chest discomfort."
+    assert body["summary"] == "Patient reports chest discomfort."
     assert len(document_repository.documents) == 1
     assert document_repository.documents[0].storage_path == body["storage_path"]
+    assert document_repository.documents[0].summary == body["summary"]
 
 
 def test_upload_patient_document_returns_404_for_missing_patient(client: TestClient) -> None:

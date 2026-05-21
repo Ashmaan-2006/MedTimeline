@@ -11,6 +11,11 @@ class DocumentCreate(BaseModel):
     storage_path: str
 
 
+class DocumentProcessingUpdate(BaseModel):
+    extracted_text: str | None
+    summary: str | None
+
+
 class DocumentUploadRead(BaseModel):
     id: UUID
     patient_id: UUID
