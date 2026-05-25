@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from medgraph_api.db.session import Base
 
 if TYPE_CHECKING:
+    from medgraph_api.models.document_chunk import DocumentChunk
     from medgraph_api.models.patient import Patient
     from medgraph_api.models.timeline_event import TimelineEvent
 
@@ -42,4 +43,7 @@ class Document(Base):
         back_populates="source_document",
         cascade="all, delete-orphan",
     )
-
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
