@@ -41,3 +41,18 @@ class DocumentChunkRepository:
             .limit(limit)
         )
         return list(self.db.scalars(statement).all())
+
+    def search_similar_for_patient(
+        self,
+        patient_id: UUID,
+        query_embedding: list[float],
+        limit: int = 5,
+    ) -> list[DocumentChunk]:
+        statement = (
+            select(DocumentChunk)
+            .where(DocumentChunk.patient_id == patient_id)
+            .where(DocumentChunk.embedding.is_not(None))
+            .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
+            .limit(limit)
+        )
+        return list(self.db.scalars(statement).all())
