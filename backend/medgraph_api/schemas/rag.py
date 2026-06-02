@@ -1,12 +1,25 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PatientRagQueryCreate(BaseModel):
     question: str = Field(..., min_length=1, max_length=2_000)
     limit: int = Field(default=5, ge=1, le=20)
+    document_id: UUID | None = None
+    created_from: datetime | None = None
+    created_to: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "PatientRagQueryCreate":
+        if (
+            self.created_from is not None
+            and self.created_to is not None
+            and self.created_from > self.created_to
+        ):
+            raise ValueError("created_from must be before or equal to created_to.")
+        return self
 
 
 class PatientRagSourceRead(BaseModel):

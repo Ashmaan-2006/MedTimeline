@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from medgraph_api.services.rag import PatientRagQueryService
+from medgraph_api.services.retrieval_filters import RetrievalFilters
 from medgraph_api.services.similarity_search import PatientDocumentSearchResult
 
 
@@ -12,16 +13,19 @@ class FakeSimilaritySearchService:
     last_patient_id: UUID | None = None
     last_query: str | None = None
     last_limit: int | None = None
+    last_filters: RetrievalFilters | None = None
 
     def search(
         self,
         patient_id: UUID,
         query: str,
         limit: int = 5,
+        filters: RetrievalFilters | None = None,
     ) -> list[PatientDocumentSearchResult]:
         self.last_patient_id = patient_id
         self.last_query = query
         self.last_limit = limit
+        self.last_filters = filters
         return self.results[:limit]
 
 
@@ -111,3 +115,17 @@ def test_rag_service_returns_no_evidence_answer_without_sources() -> None:
     assert result.patient_id == patient_id
     assert result.answer == "No relevant patient document evidence was found for this question."
     assert result.sources == []
+
+
+def test_rag_service_passes_retrieval_filters_to_similarity_search() -> None:
+    patient_id = uuid4()
+    similarity_search = FakeSimilaritySearchService(results=[])
+    filters = RetrievalFilters(document_id=uuid4())
+
+    PatientRagQueryService(similarity_search=similarity_search).answer_question(
+        patient_id=patient_id,
+        question="What changed?",
+        filters=filters,
+    )
+
+    assert similarity_search.last_filters == filters

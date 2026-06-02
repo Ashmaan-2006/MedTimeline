@@ -4,6 +4,7 @@ from uuid import UUID
 
 from medgraph_api.crud.document_chunks import DocumentChunkRepository
 from medgraph_api.services.embeddings import HashingEmbeddingService
+from medgraph_api.services.retrieval_filters import RetrievalFilters
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class PatientDocumentSimilaritySearchService:
         patient_id: UUID,
         query: str,
         limit: int = 5,
+        filters: RetrievalFilters | None = None,
     ) -> list[PatientDocumentSearchResult]:
         if limit <= 0:
             raise ValueError("limit must be greater than 0.")
@@ -45,6 +47,7 @@ class PatientDocumentSimilaritySearchService:
             patient_id=patient_id,
             query_embedding=query_embedding.embedding,
             limit=limit,
+            filters=filters,
         )
         return [
             PatientDocumentSearchResult(

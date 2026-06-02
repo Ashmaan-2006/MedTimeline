@@ -6,6 +6,7 @@ from medgraph_api.services.similarity_search import (
     PatientDocumentSearchResult,
     PatientDocumentSimilaritySearchService,
 )
+from medgraph_api.services.retrieval_filters import RetrievalFilters
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class PatientRagQueryService:
         patient_id: UUID,
         question: str,
         limit: int = 5,
+        filters: RetrievalFilters | None = None,
     ) -> PatientRagQueryResult:
         normalized_question = " ".join(question.split())
         if not normalized_question:
@@ -53,6 +55,7 @@ class PatientRagQueryService:
             patient_id=patient_id,
             query=normalized_question,
             limit=limit,
+            filters=filters,
         )
         if not retrieved_sources:
             return PatientRagQueryResult(

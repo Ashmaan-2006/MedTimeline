@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from medgraph_api.api.deps import get_patient_rag_query_service, get_patient_repository
 from medgraph_api.main import app
 from medgraph_api.services.rag import PatientRagCitationSource, PatientRagQueryResult
+from medgraph_api.services.retrieval_filters import RetrievalFilters
 from medgraph_api.services.similarity_search import PatientDocumentSearchResult
 
 
@@ -37,16 +38,19 @@ class FakeRagQueryService:
         self.last_patient_id: UUID | None = None
         self.last_question: str | None = None
         self.last_limit: int | None = None
+        self.last_filters: RetrievalFilters | None = None
 
     def answer_question(
         self,
         patient_id: UUID,
         question: str,
         limit: int = 5,
+        filters: RetrievalFilters | None = None,
     ) -> PatientRagQueryResult:
         self.last_patient_id = patient_id
         self.last_question = question
         self.last_limit = limit
+        self.last_filters = filters
         return PatientRagQueryResult(
             patient_id=patient_id,
             question=question,
@@ -102,7 +106,13 @@ def test_query_patient_documents_returns_answer_and_sources() -> None:
     try:
         response = TestClient(app).post(
             f"/patients/{patient.id}/rag/query",
-            json={"question": "Why did symptoms worsen?", "limit": 3},
+            json={
+                "question": "Why did symptoms worsen?",
+                "limit": 3,
+                "document_id": str(source.document_id),
+                "created_from": "2026-01-01T00:00:00Z",
+                "created_to": "2026-01-31T23:59:00Z",
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -122,6 +132,10 @@ def test_query_patient_documents_returns_answer_and_sources() -> None:
     assert rag_query_service.last_patient_id == patient.id
     assert rag_query_service.last_question == "Why did symptoms worsen?"
     assert rag_query_service.last_limit == 3
+    assert rag_query_service.last_filters is not None
+    assert rag_query_service.last_filters.document_id == source.document_id
+    assert rag_query_service.last_filters.created_from is not None
+    assert rag_query_service.last_filters.created_to is not None
 
 
 def test_query_patient_documents_returns_404_for_missing_patient() -> None:

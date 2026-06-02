@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from medgraph_api.services.embeddings import HashingEmbeddingService
+from medgraph_api.services.retrieval_filters import RetrievalFilters
 from medgraph_api.services.similarity_search import PatientDocumentSimilaritySearchService
 
 
@@ -27,16 +28,19 @@ class FakeDocumentChunkRepository:
         self.last_patient_id: UUID | None = None
         self.last_query_embedding: list[float] | None = None
         self.last_limit: int | None = None
+        self.last_filters: RetrievalFilters | None = None
 
     def search_similar_for_patient(
         self,
         patient_id: UUID,
         query_embedding: list[float],
         limit: int = 5,
+        filters: RetrievalFilters | None = None,
     ) -> list[FakeDocumentChunk]:
         self.last_patient_id = patient_id
         self.last_query_embedding = query_embedding
         self.last_limit = limit
+        self.last_filters = filters
         return self.chunks[:limit]
 
 
@@ -109,3 +113,19 @@ def test_search_rejects_non_positive_limit() -> None:
 
     with pytest.raises(ValueError, match="limit"):
         service.search(patient_id=uuid4(), query="chest pain", limit=0)
+
+
+def test_search_passes_retrieval_filters_to_repository() -> None:
+    repository = FakeDocumentChunkRepository()
+    filters = RetrievalFilters(document_id=uuid4())
+
+    PatientDocumentSimilaritySearchService(
+        document_chunks=repository,
+        embedding_service=HashingEmbeddingService(),
+    ).search(
+        patient_id=uuid4(),
+        query="chest pain",
+        filters=filters,
+    )
+
+    assert repository.last_filters == filters

@@ -7,6 +7,7 @@ from medgraph_api.api.deps import get_patient_rag_query_service, get_patient_rep
 from medgraph_api.crud.patients import PatientRepository
 from medgraph_api.schemas.rag import PatientRagQueryCreate, PatientRagQueryRead
 from medgraph_api.services.rag import PatientRagQueryService
+from medgraph_api.services.retrieval_filters import RetrievalFilters
 
 router = APIRouter(prefix="/patients/{patient_id}/rag", tags=["rag"])
 
@@ -29,4 +30,9 @@ def query_patient_documents(
         patient_id=patient_id,
         question=payload.question,
         limit=payload.limit,
+        filters=RetrievalFilters(
+            document_id=payload.document_id,
+            created_from=payload.created_from,
+            created_to=payload.created_to,
+        ),
     )
