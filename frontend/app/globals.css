@@ -317,6 +317,16 @@ select {
   width: 100%;
 }
 
+.select-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  min-height: 42px;
+  padding: 9px 10px;
+  width: 100%;
+}
+
 .patient-form {
   display: grid;
   gap: 12px;
@@ -435,6 +445,134 @@ select {
   margin-top: 16px;
 }
 
+.rag-panel {
+  margin-top: 16px;
+}
+
+.rag-panel-header {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.rag-panel-subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: -4px 0 0;
+}
+
+.rag-chat-log {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.rag-empty-state {
+  min-height: 120px;
+}
+
+.chat-message {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.chat-message-user {
+  background: var(--surface-subtle);
+}
+
+.chat-message-assistant {
+  background: var(--surface);
+}
+
+.chat-role {
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.chat-message p {
+  line-height: 1.5;
+  margin: 0;
+}
+
+.citation-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.citation-item {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.citation-item summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.citation-item summary span {
+  color: var(--accent-strong);
+  margin-right: 8px;
+}
+
+.citation-item p {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.citation-meta {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.rag-form {
+  display: grid;
+  gap: 12px;
+}
+
+.rag-filter-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(240px, 1fr) minmax(150px, 0.35fr) minmax(150px, 0.35fr);
+}
+
+.rag-filter-row label,
+.rag-question-label {
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.rag-question-row {
+  align-items: stretch;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.rag-question-input {
+  min-height: 88px;
+}
+
+.rag-submit-button {
+  min-width: 112px;
+}
+
 .timeline-list {
   display: grid;
   gap: 16px;
@@ -521,6 +659,11 @@ select {
   }
 
   .form-grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .rag-filter-row,
+  .rag-question-row {
     grid-template-columns: 1fr;
   }
 }

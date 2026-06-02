@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { DocumentUploadForm } from "@/components/document-upload-form";
+import { RagChatPanel } from "@/components/rag-chat-panel";
 import { getPatient, getPatientDocuments, getPatientTimelineEvents } from "@/lib/api";
 
 type PatientProfilePageProps = {
@@ -137,6 +138,8 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
           <div className="empty-state">Uploaded document summaries will appear here.</div>
         )}
       </section>
+
+      <RagChatPanel documents={patientDocuments} patientId={patient.id} />
 
       <section className="panel timeline-panel">
         <h2 className="panel-title">Timeline Events</h2>
