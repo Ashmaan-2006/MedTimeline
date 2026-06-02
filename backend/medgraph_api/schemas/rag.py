@@ -10,8 +10,10 @@ class PatientRagQueryCreate(BaseModel):
 
 
 class PatientRagSourceRead(BaseModel):
+    citation_label: str
     chunk_id: UUID
     document_id: UUID
+    patient_id: UUID
     chunk_index: int
     content: str
     embedding_model: str | None

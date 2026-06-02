@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from medgraph_api.services.similarity_search import (
@@ -8,11 +9,25 @@ from medgraph_api.services.similarity_search import (
 
 
 @dataclass(frozen=True)
+class PatientRagCitationSource:
+    citation_label: str
+    chunk_id: UUID
+    document_id: UUID
+    patient_id: UUID
+    chunk_index: int
+    content: str
+    embedding_model: str | None
+    token_count: int | None
+    chunk_metadata: dict | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class PatientRagQueryResult:
     patient_id: UUID
     question: str
     answer: str
-    sources: list[PatientDocumentSearchResult]
+    sources: list[PatientRagCitationSource]
 
 
 class PatientRagQueryService:
@@ -34,12 +49,12 @@ class PatientRagQueryService:
                 sources=[],
             )
 
-        sources = self.similarity_search.search(
+        retrieved_sources = self.similarity_search.search(
             patient_id=patient_id,
             query=normalized_question,
             limit=limit,
         )
-        if not sources:
+        if not retrieved_sources:
             return PatientRagQueryResult(
                 patient_id=patient_id,
                 question=normalized_question,
@@ -47,15 +62,45 @@ class PatientRagQueryService:
                 sources=[],
             )
 
-        evidence_summary = " ".join(
-            self._first_sentence(source.content) for source in sources[:3] if source.content.strip()
-        )
+        sources = self._build_cited_sources(retrieved_sources)
+        evidence_summary = " ".join(self._cited_evidence_sentences(sources[:3]))
         return PatientRagQueryResult(
             patient_id=patient_id,
             question=normalized_question,
             answer=f"Based on the retrieved patient documents: {evidence_summary}",
             sources=sources,
         )
+
+    def _build_cited_sources(
+        self,
+        sources: list[PatientDocumentSearchResult],
+    ) -> list[PatientRagCitationSource]:
+        return [
+            PatientRagCitationSource(
+                citation_label=f"[{index}]",
+                chunk_id=source.chunk_id,
+                document_id=source.document_id,
+                patient_id=source.patient_id,
+                chunk_index=source.chunk_index,
+                content=source.content,
+                embedding_model=source.embedding_model,
+                token_count=source.token_count,
+                chunk_metadata=source.chunk_metadata,
+                created_at=source.created_at,
+            )
+            for index, source in enumerate(sources, start=1)
+        ]
+
+    def _cited_evidence_sentences(
+        self,
+        sources: list[PatientRagCitationSource],
+    ) -> list[str]:
+        sentences = []
+        for source in sources:
+            sentence = self._first_sentence(source.content).rstrip(".?!")
+            if sentence:
+                sentences.append(f"{sentence} {source.citation_label}.")
+        return sentences
 
     @staticmethod
     def _first_sentence(text: str) -> str:

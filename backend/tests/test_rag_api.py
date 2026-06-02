@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from medgraph_api.api.deps import get_patient_rag_query_service, get_patient_repository
 from medgraph_api.main import app
-from medgraph_api.services.rag import PatientRagQueryResult
+from medgraph_api.services.rag import PatientRagCitationSource, PatientRagQueryResult
 from medgraph_api.services.similarity_search import PatientDocumentSearchResult
 
 
@@ -50,8 +50,21 @@ class FakeRagQueryService:
         return PatientRagQueryResult(
             patient_id=patient_id,
             question=question,
-            answer="Based on the retrieved patient documents: Chest pain worsened.",
-            sources=[self.source],
+            answer="Based on the retrieved patient documents: Chest pain worsened [1].",
+            sources=[
+                PatientRagCitationSource(
+                    citation_label="[1]",
+                    chunk_id=self.source.chunk_id,
+                    document_id=self.source.document_id,
+                    patient_id=self.source.patient_id,
+                    chunk_index=self.source.chunk_index,
+                    content=self.source.content,
+                    embedding_model=self.source.embedding_model,
+                    token_count=self.source.token_count,
+                    chunk_metadata=self.source.chunk_metadata,
+                    created_at=self.source.created_at,
+                )
+            ],
         )
 
 
@@ -98,10 +111,12 @@ def test_query_patient_documents_returns_answer_and_sources() -> None:
     body = response.json()
     assert body["patient_id"] == str(patient.id)
     assert body["question"] == "Why did symptoms worsen?"
-    assert body["answer"] == "Based on the retrieved patient documents: Chest pain worsened."
+    assert body["answer"] == "Based on the retrieved patient documents: Chest pain worsened [1]."
     assert len(body["sources"]) == 1
+    assert body["sources"][0]["citation_label"] == "[1]"
     assert body["sources"][0]["chunk_id"] == str(source.chunk_id)
     assert body["sources"][0]["document_id"] == str(source.document_id)
+    assert body["sources"][0]["patient_id"] == str(patient.id)
     assert body["sources"][0]["chunk_index"] == 1
     assert body["sources"][0]["content"] == "Chest pain worsened after medication change."
     assert rag_query_service.last_patient_id == patient.id
