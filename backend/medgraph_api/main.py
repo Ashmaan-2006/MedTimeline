@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from medgraph_api.api.routes import documents
 from medgraph_api.api.routes import patients
+from medgraph_api.api.routes import rag
 from medgraph_api.db.init import initialize_database
 
 
@@ -23,6 +24,7 @@ app = FastAPI(
 
 app.include_router(patients.router)
 app.include_router(documents.router)
+app.include_router(rag.router)
 
 
 @app.get("/health", tags=["system"])

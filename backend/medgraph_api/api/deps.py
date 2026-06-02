@@ -11,6 +11,8 @@ from medgraph_api.db.session import get_db
 from medgraph_api.services.chunking import TextChunkingService
 from medgraph_api.services.embeddings import HashingEmbeddingService
 from medgraph_api.services.extraction import DocumentExtractionService
+from medgraph_api.services.rag import PatientRagQueryService
+from medgraph_api.services.similarity_search import PatientDocumentSimilaritySearchService
 from medgraph_api.services.storage import LocalUploadStorage
 from medgraph_api.services.summarization import BasicAISummaryService
 from medgraph_api.services.timeline_extraction import BasicTimelineEventExtractionService
@@ -50,6 +52,24 @@ def get_text_chunking_service() -> TextChunkingService:
 
 def get_embedding_service() -> HashingEmbeddingService:
     return HashingEmbeddingService()
+
+
+def get_patient_document_similarity_search_service(
+    document_chunks: DocumentChunkRepository = Depends(get_document_chunk_repository),
+    embedding_service: HashingEmbeddingService = Depends(get_embedding_service),
+) -> PatientDocumentSimilaritySearchService:
+    return PatientDocumentSimilaritySearchService(
+        document_chunks=document_chunks,
+        embedding_service=embedding_service,
+    )
+
+
+def get_patient_rag_query_service(
+    similarity_search: PatientDocumentSimilaritySearchService = Depends(
+        get_patient_document_similarity_search_service
+    ),
+) -> PatientRagQueryService:
+    return PatientRagQueryService(similarity_search=similarity_search)
 
 
 def get_summary_service() -> BasicAISummaryService:
