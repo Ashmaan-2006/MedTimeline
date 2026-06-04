@@ -62,8 +62,9 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [status, setStatus] = useState<"idle" | "asking" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "asking">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [failedQuestion, setFailedQuestion] = useState<string | null>(null);
 
   const documentsById = useMemo(
     () => new Map(documents.map((document) => [document.id, document])),
@@ -75,7 +76,6 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
 
     const trimmedQuestion = question.trim();
     if (trimmedQuestion.length === 0) {
-      setStatus("error");
       setErrorMessage("Enter a question before querying the patient record.");
       return;
     }
@@ -90,6 +90,7 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
     setQuestion("");
     setStatus("asking");
     setErrorMessage(null);
+    setFailedQuestion(null);
 
     const payload = {
       question: trimmedQuestion,
@@ -99,24 +100,33 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
       created_to: createdTo ? `${createdTo}T23:59:59.999Z` : undefined,
     };
 
-    const response = await fetch(`/api/patients/${patientId}/rag/query`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/patients/${patientId}/rag/query`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      setStatus("idle");
+      setFailedQuestion(trimmedQuestion);
+      setErrorMessage("Unable to reach the RAG service. Check that the backend is running and try again.");
+      return;
+    }
 
     if (!response.ok) {
       let detail = "RAG query failed. Check that the backend service is running.";
       try {
-        const error = (await response.json()) as { detail?: string };
-        detail = error.detail ?? detail;
+        const error = (await response.json()) as { detail?: unknown };
+        detail = typeof error.detail === "string" ? error.detail : detail;
       } catch {
         // Keep the default message when the proxy returns a non-JSON error body.
       }
 
-      setStatus("error");
+      setStatus("idle");
+      setFailedQuestion(trimmedQuestion);
       setErrorMessage(detail);
       return;
     }
@@ -134,6 +144,16 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
     setStatus("idle");
   }
 
+  function retryFailedQuestion() {
+    if (failedQuestion === null) {
+      return;
+    }
+
+    setQuestion(failedQuestion);
+    setErrorMessage(null);
+    setFailedQuestion(null);
+  }
+
   return (
     <section className="panel rag-panel">
       <div className="rag-panel-header">
@@ -143,7 +163,7 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
         </div>
       </div>
 
-      <div className="rag-chat-log" aria-live="polite">
+      <div className="rag-chat-log" aria-busy={status === "asking"} aria-live="polite">
         {messages.length > 0 ? (
           messages.map((message) => (
             <article className={`chat-message chat-message-${message.role}`} key={message.id}>
@@ -175,6 +195,30 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
             Ask about medication changes, symptom progression, abnormal findings, or prior document evidence.
           </div>
         )}
+        {status === "asking" ? (
+          <article className="chat-message chat-message-assistant chat-message-loading">
+            <div className="chat-role">MedGraph</div>
+            <div className="loading-line">
+              <span />
+              <span />
+              <span />
+            </div>
+            <p>Retrieving patient evidence and generating a cited answer.</p>
+          </article>
+        ) : null}
+        {errorMessage !== null ? (
+          <div className="rag-error-state" role="alert">
+            <div>
+              <strong>RAG chat needs attention</strong>
+              <p>{errorMessage}</p>
+            </div>
+            {failedQuestion !== null ? (
+              <button className="secondary-button" onClick={retryFailedQuestion} type="button">
+                Restore question
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <form className="rag-form" onSubmit={handleSubmit}>
@@ -234,7 +278,6 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
             {status === "asking" ? "Asking..." : "Ask"}
           </button>
         </div>
-        {errorMessage !== null ? <p className="form-message form-message-error">{errorMessage}</p> : null}
       </form>
     </section>
   );

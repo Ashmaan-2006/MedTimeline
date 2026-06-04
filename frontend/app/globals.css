@@ -389,6 +389,22 @@ select {
   opacity: 0.65;
 }
 
+.secondary-button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.secondary-button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 .form-message {
   color: var(--success);
   font-size: 13px;
@@ -490,6 +506,10 @@ select {
   background: var(--surface);
 }
 
+.chat-message-loading {
+  border-style: dashed;
+}
+
 .chat-role {
   color: var(--accent-strong);
   font-size: 12px;
@@ -500,6 +520,43 @@ select {
 .chat-message p {
   line-height: 1.5;
   margin: 0;
+}
+
+.loading-line {
+  display: flex;
+  gap: 6px;
+  min-height: 14px;
+}
+
+.loading-line span {
+  animation: loading-pulse 1s ease-in-out infinite;
+  background: var(--accent);
+  border-radius: 999px;
+  display: block;
+  height: 8px;
+  opacity: 0.35;
+  width: 8px;
+}
+
+.loading-line span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.loading-line span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes loading-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 
 .citation-list {
@@ -536,6 +593,30 @@ select {
   color: var(--muted);
   font-size: 12px;
   margin-top: 8px;
+}
+
+.rag-error-state {
+  align-items: center;
+  background: #fff7f5;
+  border: 1px solid #f1b8b2;
+  border-radius: 8px;
+  color: var(--danger);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.rag-error-state strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.rag-error-state p {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
 }
 
 .rag-form {
@@ -665,5 +746,10 @@ select {
   .rag-filter-row,
   .rag-question-row {
     grid-template-columns: 1fr;
+  }
+
+  .rag-error-state {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
