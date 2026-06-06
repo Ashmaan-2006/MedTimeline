@@ -13,7 +13,12 @@ export function HomeWorkspace() {
   return (
     <section className="workspace-grid">
       <div className="panel">
-        <h2 className="panel-title">Create Patient</h2>
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Create Patient</h2>
+            <p className="panel-kicker">Start a longitudinal record</p>
+          </div>
+        </div>
         <CreatePatientForm onPatientCreated={setActivePatient} />
         {activePatient !== null ? (
           <div className="created-patient">
@@ -29,7 +34,12 @@ export function HomeWorkspace() {
         ) : null}
       </div>
       <div className="panel">
-        <h2 className="panel-title">Document Processing</h2>
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Document Processing</h2>
+            <p className="panel-kicker">Upload notes, PDFs, and reports</p>
+          </div>
+        </div>
         <DocumentUploadForm patientId={activePatient?.id} showPatientIdField={false} />
       </div>
     </section>

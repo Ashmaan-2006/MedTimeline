@@ -19,6 +19,7 @@ export default function RootLayout({
         <div className="app-shell">
           <aside className="sidebar" aria-label="Primary navigation">
             <div className="brand">
+              <span className="brand-mark">MG</span>
               <span className="brand-title">MedGraph AI</span>
               <span className="brand-subtitle">Clinical timeline workspace</span>
             </div>
@@ -44,7 +45,10 @@ export default function RootLayout({
           </aside>
           <main className="main">
             <header className="topbar">
-              <span className="topbar-title">Patient Intelligence</span>
+              <div>
+                <span className="topbar-title">Patient Intelligence</span>
+                <span className="topbar-subtitle">Timeline, retrieval, and cited clinical summaries</span>
+              </div>
               <span className="topbar-status">MVP workspace</span>
             </header>
             <div className="content">{children}</div>

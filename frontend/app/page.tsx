@@ -5,7 +5,7 @@ export default function HomePage() {
     <>
       <section className="page-header">
         <div>
-          <h1 className="page-title">Patient Timeline App</h1>
+          <h1 className="page-title">Patient timeline intelligence</h1>
           <p className="page-description">
             Upload clinical records, extract document text, generate summaries, and assemble a
             longitudinal timeline for each patient.

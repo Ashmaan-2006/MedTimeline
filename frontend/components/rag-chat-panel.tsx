@@ -181,7 +181,7 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
                         </summary>
                         <p>{source.content}</p>
                         <div className="citation-meta">
-                          Chunk {source.chunk_index + 1} · {formatDateTime(source.created_at)}
+                          Chunk {source.chunk_index + 1} - {formatDateTime(source.created_at)}
                         </div>
                       </details>
                     );

@@ -18,7 +18,8 @@ export function CreatePatientForm({ onPatientCreated }: CreatePatientFormProps) 
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     const medicalRecordNumber = String(formData.get("medical_record_number") ?? "").trim();
     const firstName = String(formData.get("first_name") ?? "").trim();
     const lastName = String(formData.get("last_name") ?? "").trim();
@@ -65,7 +66,7 @@ export function CreatePatientForm({ onPatientCreated }: CreatePatientFormProps) 
     onPatientCreated(patient);
     setStatus("success");
     setMessage(`Created ${patient.first_name} ${patient.last_name}.`);
-    event.currentTarget.reset();
+    form.reset();
   }
 
   return (
