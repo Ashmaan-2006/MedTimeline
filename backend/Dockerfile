@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app/backend
 
 COPY backend/pyproject.toml ./pyproject.toml
+COPY backend/medgraph_api ./medgraph_api
 
 RUN pip install --no-cache-dir -e .
 
