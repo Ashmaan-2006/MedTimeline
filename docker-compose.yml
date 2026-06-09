@@ -25,6 +25,8 @@ services:
       - "8001:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://medgraph:medgraph@postgres:5432/medgraph}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://guest:guest@rabbitmq:5672//}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-rpc://}
     volumes:
       - ./backend:/app/backend
     depends_on:

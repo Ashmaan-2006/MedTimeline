@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "FastAPI backend for MedGraph AI clinical timeline intelligence."
 requires-python = ">=3.11"
 dependencies = [
+  "celery>=5.4.0",
   "fastapi>=0.115.0",
+  "flower>=2.0.0",
+  "kombu>=5.4.0",
   "pgvector>=0.3.0",
   "psycopg[binary]>=3.2.0",
   "pypdf>=6.0.0",
@@ -19,6 +22,9 @@ dev = [
   "pytest>=8.0.0",
   "ruff>=0.6.0"
 ]
+
+[tool.setuptools.packages.find]
+include = ["medgraph_api*"]
 
 [tool.ruff]
 line-length = 100
