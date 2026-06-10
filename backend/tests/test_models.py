@@ -20,3 +20,16 @@ def test_document_chunk_model_includes_embedding_metadata_columns() -> None:
     chunk_table = Base.metadata.tables["document_chunks"]
 
     assert {"embedding_model", "token_count", "chunk_metadata"}.issubset(chunk_table.columns.keys())
+
+
+def test_document_model_includes_processing_state_columns() -> None:
+    document_table = Base.metadata.tables["documents"]
+
+    assert {
+        "processing_status",
+        "processing_error",
+        "processing_started_at",
+        "processing_completed_at",
+        "celery_task_id",
+        "processing_attempts",
+    }.issubset(document_table.columns.keys())

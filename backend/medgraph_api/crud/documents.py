@@ -38,7 +38,7 @@ class DocumentRepository:
         document: Document,
         payload: DocumentProcessingUpdate,
     ) -> Document:
-        for field, value in payload.model_dump().items():
+        for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(document, field, value)
 
         self.db.add(document)

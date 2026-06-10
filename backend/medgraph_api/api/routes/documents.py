@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from medgraph_api.schemas.document_chunk import DocumentChunkCreate
 from medgraph_api.schemas.document import (
     DocumentCreate,
     DocumentProcessingUpdate,
+    DocumentProcessingStatus,
     DocumentUploadRead,
 )
 from medgraph_api.services.chunking import TextChunkingService
@@ -97,18 +99,34 @@ def upload_patient_document(
     )
 
     try:
+        processing_started_at = datetime.now(UTC)
         extracted_text = extraction_service.extract_text(
             storage_path=stored_upload.storage_path,
             content_type=stored_upload.content_type,
         )
     except UnsupportedDocumentTypeError:
-        return document
+        return documents.update_processing(
+            document,
+            DocumentProcessingUpdate(
+                extracted_text=None,
+                summary=None,
+                processing_status=DocumentProcessingStatus.FAILED,
+                processing_error="Unsupported document type.",
+                processing_completed_at=datetime.now(UTC),
+                processing_attempts=document.processing_attempts + 1,
+            ),
+        )
 
     processed_document = documents.update_processing(
         document,
         DocumentProcessingUpdate(
             extracted_text=extracted_text,
             summary=summary_service.summarize(extracted_text),
+            processing_status=DocumentProcessingStatus.COMPLETED,
+            processing_error=None,
+            processing_started_at=processing_started_at,
+            processing_completed_at=datetime.now(UTC),
+            processing_attempts=document.processing_attempts + 1,
         ),
     )
 

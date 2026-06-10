@@ -49,6 +49,12 @@ class FakeDocument:
     storage_path: str
     extracted_text: str | None
     summary: str | None
+    processing_status: str
+    processing_error: str | None
+    processing_started_at: datetime | None
+    processing_completed_at: datetime | None
+    celery_task_id: str | None
+    processing_attempts: int
     created_at: datetime
     updated_at: datetime
 
@@ -63,6 +69,10 @@ class FakeDocumentRepository:
             id=uuid4(),
             extracted_text=None,
             summary=None,
+            processing_error=None,
+            processing_started_at=None,
+            processing_completed_at=None,
+            celery_task_id=None,
             created_at=now,
             updated_at=now,
             **payload.model_dump(),
@@ -86,8 +96,8 @@ class FakeDocumentRepository:
         document: FakeDocument,
         payload: DocumentProcessingUpdate,
     ) -> FakeDocument:
-        document.extracted_text = payload.extracted_text
-        document.summary = payload.summary
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(document, field, value)
         document.updated_at = datetime.now(UTC)
         return document
 
@@ -202,9 +212,17 @@ def test_upload_patient_document(
     assert body["storage_path"].endswith("note.txt")
     assert body["extracted_text"] == "Patient reports chest discomfort."
     assert body["summary"] == "Patient reports chest discomfort."
+    assert body["processing_status"] == "completed"
+    assert body["processing_error"] is None
+    assert body["processing_started_at"] is not None
+    assert body["processing_completed_at"] is not None
+    assert body["celery_task_id"] is None
+    assert body["processing_attempts"] == 1
     assert len(document_repository.documents) == 1
     assert document_repository.documents[0].storage_path == body["storage_path"]
     assert document_repository.documents[0].summary == body["summary"]
+    assert document_repository.documents[0].processing_status == "completed"
+    assert document_repository.documents[0].processing_attempts == 1
     assert document_chunk_repository.document_id == document_repository.documents[0].id
     assert len(document_chunk_repository.chunks) == 1
     assert document_chunk_repository.chunks[0].patient_id == patient.id
@@ -235,6 +253,12 @@ def test_list_patient_documents(
             storage_path="storage/uploads/note.txt",
             extracted_text="Patient reports chest discomfort.",
             summary="Patient reports chest discomfort.",
+            processing_status="completed",
+            processing_error=None,
+            processing_started_at=now,
+            processing_completed_at=now,
+            celery_task_id=None,
+            processing_attempts=1,
             created_at=now,
             updated_at=now,
         )
@@ -247,6 +271,7 @@ def test_list_patient_documents(
     assert len(body) == 1
     assert body[0]["filename"] == "note.txt"
     assert body[0]["summary"] == "Patient reports chest discomfort."
+    assert body[0]["processing_status"] == "completed"
 
 
 def test_list_patient_documents_returns_404_for_missing_patient(client: TestClient) -> None:
