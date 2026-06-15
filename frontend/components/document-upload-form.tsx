@@ -8,8 +8,28 @@ type DocumentUploadFormProps = {
   showPatientIdField?: boolean;
 };
 
+type UploadStatus = "idle" | "uploading" | "queued" | "processing" | "success" | "error";
+
+type UploadedDocument = {
+  id: string;
+  processing_status: DocumentProcessingStatus;
+  celery_task_id: string | null;
+};
+
+type DocumentProcessingStatus = "uploaded" | "queued" | "processing" | "completed" | "failed";
+
+type DocumentStatusResponse = {
+  document_id: string;
+  status: DocumentProcessingStatus;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+};
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const POLL_INTERVAL_MS = 2500;
+const MAX_POLL_ATTEMPTS = 24;
 
 export function DocumentUploadForm({
   patientId,
@@ -18,7 +38,7 @@ export function DocumentUploadForm({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [patientIdInput, setPatientIdInput] = useState("");
-  const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<UploadStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -69,13 +89,80 @@ export function DocumentUploadForm({
       return;
     }
 
-    setStatus("success");
-    setMessage("Document uploaded, extracted, summarized, and added to the timeline.");
+    let uploadedDocument: UploadedDocument;
+    try {
+      uploadedDocument = (await response.json()) as UploadedDocument;
+    } catch {
+      setStatus("error");
+      setMessage("Upload succeeded, but the response could not be read.");
+      return;
+    }
+
+    setStatus("queued");
+    setMessage("Queued for processing...");
     if (fileInputRef.current !== null) {
       fileInputRef.current.value = "";
     }
+
+    await pollDocumentStatus(resolvedPatientId, uploadedDocument.id);
+  }
+
+  async function pollDocumentStatus(resolvedPatientId: string, documentId: string) {
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
+      if (attempt > 0) {
+        await wait(POLL_INTERVAL_MS);
+      }
+
+      const response = await fetch(
+        `/api/patients/${resolvedPatientId}/documents/${documentId}/status`,
+      );
+
+      if (!response.ok) {
+        setStatus("error");
+        setMessage("Document was uploaded, but status polling failed.");
+        return;
+      }
+
+      const documentStatus = (await response.json()) as DocumentStatusResponse;
+      if (documentStatus.status === "queued") {
+        setStatus("queued");
+        setMessage("Queued for processing...");
+        continue;
+      }
+
+      if (documentStatus.status === "processing") {
+        setStatus("processing");
+        setMessage("Processing document...");
+        continue;
+      }
+
+      if (documentStatus.status === "completed") {
+        setStatus("success");
+        setMessage("Document processed and added to the timeline.");
+        router.refresh();
+        return;
+      }
+
+      if (documentStatus.status === "failed") {
+        setStatus("error");
+        setMessage(documentStatus.error ?? "Document processing failed.");
+        router.refresh();
+        return;
+      }
+    }
+
+    setStatus("success");
+    setMessage("Document is still processing. Refresh the page in a moment to check progress.");
     router.refresh();
   }
+
+  function wait(milliseconds: number) {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, milliseconds);
+    });
+  }
+
+  const isBusy = status === "uploading" || status === "queued" || status === "processing";
 
   return (
     <form className="upload-form" onSubmit={handleSubmit}>
@@ -86,7 +173,7 @@ export function DocumentUploadForm({
           </label>
           <input
             className="text-input"
-            disabled={status === "uploading"}
+            disabled={isBusy}
             id="upload-patient-id"
             onChange={(event) => setPatientIdInput(event.target.value)}
             placeholder="Paste an existing patient UUID"
@@ -101,14 +188,20 @@ export function DocumentUploadForm({
       <input
         accept=".pdf,.txt,.text,.md,application/pdf,text/plain,text/markdown"
         className="file-input"
-        disabled={status === "uploading"}
+        disabled={isBusy}
         id="patient-document"
         name="file"
         ref={fileInputRef}
         type="file"
       />
-      <button className="primary-button" disabled={status === "uploading"} type="submit">
-        {status === "uploading" ? "Uploading..." : "Upload Document"}
+      <button className="primary-button" disabled={isBusy} type="submit">
+        {status === "uploading"
+          ? "Uploading..."
+          : status === "queued"
+            ? "Queued..."
+            : status === "processing"
+              ? "Processing..."
+              : "Upload Document"}
       </button>
       {message !== null ? (
         <p className={status === "error" ? "form-message form-message-error" : "form-message"}>

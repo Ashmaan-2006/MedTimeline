@@ -36,6 +36,12 @@ export type PatientDocument = {
   storage_path: string;
   extracted_text: string | null;
   summary: string | null;
+  processing_status: "uploaded" | "queued" | "processing" | "completed" | "failed";
+  processing_error: string | null;
+  processing_started_at: string | null;
+  processing_completed_at: string | null;
+  celery_task_id: string | null;
+  processing_attempts: number;
   created_at: string;
   updated_at: string;
 };
