@@ -12,6 +12,7 @@ from medgraph_api.crud.documents import DocumentRepository
 from medgraph_api.crud.patients import PatientRepository
 from medgraph_api.schemas.document import (
     DocumentCreate,
+    DocumentProcessingStatusRead,
     DocumentProcessingStatus,
     DocumentProcessingUpdate,
     DocumentUploadRead,
@@ -39,6 +40,30 @@ def list_patient_documents(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found.")
 
     return documents.list_for_patient(patient_id=patient_id, skip=skip, limit=limit)
+
+
+@router.get("/{document_id}/status", response_model=DocumentProcessingStatusRead)
+def get_patient_document_processing_status(
+    patient_id: UUID,
+    document_id: UUID,
+    patients: PatientRepo,
+    documents: DocumentRepo,
+) -> DocumentProcessingStatusRead:
+    patient = patients.get(patient_id)
+    if patient is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found.")
+
+    document = documents.get(document_id)
+    if document is None or document.patient_id != patient_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
+    return DocumentProcessingStatusRead(
+        document_id=document.id,
+        status=document.processing_status,
+        started_at=document.processing_started_at,
+        completed_at=document.processing_completed_at,
+        error=document.processing_error,
+    )
 
 
 @router.post("", response_model=DocumentUploadRead, status_code=status.HTTP_201_CREATED)

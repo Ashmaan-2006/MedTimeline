@@ -59,6 +59,12 @@ class FakeDocumentRepository:
     def __init__(self) -> None:
         self.documents: list[FakeDocument] = []
 
+    def get(self, document_id: UUID) -> FakeDocument | None:
+        for document in self.documents:
+            if document.id == document_id:
+                return document
+        return None
+
     def create(self, payload: DocumentCreate) -> FakeDocument:
         now = datetime.now(UTC)
         document = FakeDocument(
@@ -240,6 +246,83 @@ def test_list_patient_documents(
 
 def test_list_patient_documents_returns_404_for_missing_patient(client: TestClient) -> None:
     response = client.get(f"/patients/{uuid4()}/documents")
+
+    assert response.status_code == 404
+
+
+def test_get_patient_document_processing_status(
+    client: TestClient,
+    patient: FakePatient,
+    document_repository: FakeDocumentRepository,
+) -> None:
+    now = datetime.now(UTC)
+    document = FakeDocument(
+        id=uuid4(),
+        patient_id=patient.id,
+        filename="note.txt",
+        content_type="text/plain",
+        storage_path="storage/uploads/note.txt",
+        extracted_text=None,
+        summary=None,
+        processing_status="processing",
+        processing_error=None,
+        processing_started_at=now,
+        processing_completed_at=None,
+        celery_task_id="task-upload-123",
+        processing_attempts=1,
+        created_at=now,
+        updated_at=now,
+    )
+    document_repository.documents.append(document)
+
+    response = client.get(f"/patients/{patient.id}/documents/{document.id}/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "document_id": str(document.id),
+        "status": "processing",
+        "started_at": now.isoformat().replace("+00:00", "Z"),
+        "completed_at": None,
+        "error": None,
+    }
+
+
+def test_get_patient_document_processing_status_returns_404_for_missing_document(
+    client: TestClient,
+    patient: FakePatient,
+) -> None:
+    response = client.get(f"/patients/{patient.id}/documents/{uuid4()}/status")
+
+    assert response.status_code == 404
+
+
+def test_get_patient_document_processing_status_returns_404_for_other_patient_document(
+    client: TestClient,
+    patient: FakePatient,
+    document_repository: FakeDocumentRepository,
+) -> None:
+    now = datetime.now(UTC)
+    document = FakeDocument(
+        id=uuid4(),
+        patient_id=uuid4(),
+        filename="note.txt",
+        content_type="text/plain",
+        storage_path="storage/uploads/note.txt",
+        extracted_text=None,
+        summary=None,
+        processing_status="processing",
+        processing_error=None,
+        processing_started_at=now,
+        processing_completed_at=None,
+        celery_task_id="task-upload-123",
+        processing_attempts=1,
+        created_at=now,
+        updated_at=now,
+    )
+    document_repository.documents.append(document)
+
+    response = client.get(f"/patients/{patient.id}/documents/{document.id}/status")
 
     assert response.status_code == 404
 

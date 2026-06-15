@@ -51,3 +51,11 @@ class DocumentUploadRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentProcessingStatusRead(BaseModel):
+    document_id: UUID
+    status: DocumentProcessingStatus
+    started_at: datetime | None
+    completed_at: datetime | None
+    error: str | None
