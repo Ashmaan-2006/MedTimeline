@@ -8,6 +8,12 @@ ALTER TABLE documents
     ADD COLUMN IF NOT EXISTS celery_task_id VARCHAR(255),
     ADD COLUMN IF NOT EXISTS processing_attempts INTEGER NOT NULL DEFAULT 0;
 
+UPDATE documents
+SET
+    processing_status = 'completed',
+    processing_completed_at = COALESCE(processing_completed_at, updated_at, created_at)
+WHERE processing_status = 'uploaded';
+
 CREATE INDEX IF NOT EXISTS ix_documents_processing_status
     ON documents (processing_status);
 

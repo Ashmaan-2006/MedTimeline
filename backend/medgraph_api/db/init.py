@@ -27,6 +27,18 @@ def initialize_database() -> None:
         connection.execute(
             text(
                 """
+                UPDATE documents
+                SET
+                    processing_status = 'completed',
+                    processing_completed_at = COALESCE(processing_completed_at, updated_at, created_at)
+                WHERE processing_status = 'uploaded'
+                    AND (extracted_text IS NOT NULL OR summary IS NOT NULL)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
                 CREATE INDEX IF NOT EXISTS ix_documents_processing_status
                     ON documents (processing_status)
                 """
