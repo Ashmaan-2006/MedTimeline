@@ -532,7 +532,7 @@ select {
 }
 
 .document-summary-header {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   gap: 12px;
   justify-content: space-between;
@@ -547,14 +547,54 @@ select {
 
 .document-summary time {
   color: var(--muted);
-  flex: 0 0 auto;
+  display: block;
   font-size: 12px;
+  margin-top: 4px;
 }
 
 .document-summary p {
   color: var(--muted-strong);
   line-height: 1.55;
   margin: 0;
+}
+
+.document-status {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 6px 8px;
+  text-transform: uppercase;
+}
+
+.document-status-uploaded,
+.document-status-queued {
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+}
+
+.document-status-processing {
+  background: #fffaeb;
+  border-color: #fedf89;
+  color: var(--warning);
+}
+
+.document-status-completed {
+  background: var(--success-soft);
+  border-color: #abefc6;
+  color: var(--success);
+}
+
+.document-status-failed {
+  background: var(--danger-soft);
+  border-color: #f1b8b2;
+  color: var(--danger);
+}
+
+.document-summary-message-error {
+  color: var(--danger);
 }
 
 .rag-panel-header {

@@ -70,9 +70,15 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
     () => new Map(documents.map((document) => [document.id, document])),
     [documents],
   );
+  const hasQueryableDocuments = documents.length > 0;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!hasQueryableDocuments) {
+      setErrorMessage("No completed documents are available for RAG queries yet.");
+      return;
+    }
 
     const trimmedQuestion = question.trim();
     if (trimmedQuestion.length === 0) {
@@ -227,11 +233,13 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
             Document
             <select
               className="select-input"
-              disabled={status === "asking"}
+              disabled={status === "asking" || !hasQueryableDocuments}
               onChange={(event) => setDocumentId(event.target.value)}
               value={documentId}
             >
-              <option value="">All documents</option>
+              <option value="">
+                {hasQueryableDocuments ? "All completed documents" : "No completed documents"}
+              </option>
               {documents.map((document) => (
                 <option key={document.id} value={document.id}>
                   {documentLabel(document)}
@@ -243,7 +251,7 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
             From
             <input
               className="text-input"
-              disabled={status === "asking"}
+              disabled={status === "asking" || !hasQueryableDocuments}
               onChange={(event) => setCreatedFrom(event.target.value)}
               type="date"
               value={createdFrom}
@@ -253,7 +261,7 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
             To
             <input
               className="text-input"
-              disabled={status === "asking"}
+              disabled={status === "asking" || !hasQueryableDocuments}
               onChange={(event) => setCreatedTo(event.target.value)}
               type="date"
               value={createdTo}
@@ -267,14 +275,22 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
         <div className="rag-question-row">
           <textarea
             className="textarea-input rag-question-input"
-            disabled={status === "asking"}
+            disabled={status === "asking" || !hasQueryableDocuments}
             id="rag-question"
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Why did this patient's symptoms worsen?"
+            placeholder={
+              hasQueryableDocuments
+                ? "Why did this patient's symptoms worsen?"
+                : "RAG unlocks when document processing completes."
+            }
             rows={3}
             value={question}
           />
-          <button className="primary-button rag-submit-button" disabled={status === "asking"} type="submit">
+          <button
+            className="primary-button rag-submit-button"
+            disabled={status === "asking" || !hasQueryableDocuments}
+            type="submit"
+          >
             {status === "asking" ? "Asking..." : "Ask"}
           </button>
         </div>

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { DocumentUploadForm } from "@/components/document-upload-form";
 import { RagChatPanel } from "@/components/rag-chat-panel";
-import { getPatient, getPatientDocuments, getPatientTimelineEvents } from "@/lib/api";
+import { getPatient, getPatientDocuments, getPatientTimelineEvents, type PatientDocument } from "@/lib/api";
 
 type PatientProfilePageProps = {
   params: Promise<{
@@ -43,6 +43,40 @@ function formatEventType(value: string) {
     .join(" ");
 }
 
+function documentStatusLabel(document: PatientDocument) {
+  switch (document.processing_status) {
+    case "queued":
+      return "Queued";
+    case "processing":
+      return "Processing";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+    default:
+      return "Uploaded";
+  }
+}
+
+function documentStatusClassName(document: PatientDocument) {
+  return `document-status document-status-${document.processing_status}`;
+}
+
+function documentStatusMessage(document: PatientDocument) {
+  switch (document.processing_status) {
+    case "queued":
+      return "Queued for processing.";
+    case "processing":
+      return "Processing document...";
+    case "completed":
+      return document.summary ?? "Completed. No summary was generated for this document.";
+    case "failed":
+      return document.processing_error ?? "Processing failed.";
+    default:
+      return "Uploaded and waiting to be queued.";
+  }
+}
+
 export default async function PatientProfilePage({ params }: PatientProfilePageProps) {
   const { patientId } = await params;
   const [patient, documents, timelineEvents] = await Promise.all([
@@ -57,6 +91,9 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
 
   const patientName = `${patient.first_name} ${patient.last_name}`;
   const patientDocuments = documents ?? [];
+  const completedDocuments = patientDocuments.filter(
+    (document) => document.processing_status === "completed",
+  );
   const events = timelineEvents ?? [];
 
   return (
@@ -127,10 +164,23 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
             {patientDocuments.map((document) => (
               <article className="document-summary" key={document.id}>
                 <div className="document-summary-header">
-                  <h3>{document.filename}</h3>
-                  <time>{formatDateTime(document.created_at)}</time>
+                  <div>
+                    <h3>{document.filename}</h3>
+                    <time>{formatDateTime(document.created_at)}</time>
+                  </div>
+                  <span className={documentStatusClassName(document)}>
+                    {documentStatusLabel(document)}
+                  </span>
                 </div>
-                <p>{document.summary ?? "No summary was generated for this document."}</p>
+                <p
+                  className={
+                    document.processing_status === "failed"
+                      ? "document-summary-message document-summary-message-error"
+                      : "document-summary-message"
+                  }
+                >
+                  {documentStatusMessage(document)}
+                </p>
               </article>
             ))}
           </div>
@@ -139,7 +189,7 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
         )}
       </section>
 
-      <RagChatPanel documents={patientDocuments} patientId={patient.id} />
+      <RagChatPanel documents={completedDocuments} patientId={patient.id} />
 
       <section className="panel timeline-panel">
         <h2 className="panel-title">Timeline Events</h2>
