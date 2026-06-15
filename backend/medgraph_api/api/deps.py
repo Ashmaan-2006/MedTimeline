@@ -9,6 +9,7 @@ from medgraph_api.crud.patients import PatientRepository
 from medgraph_api.crud.timeline_events import TimelineEventRepository
 from medgraph_api.db.session import get_db
 from medgraph_api.services.chunking import TextChunkingService
+from medgraph_api.services.document_processing import DocumentProcessingService
 from medgraph_api.services.embeddings import HashingEmbeddingService
 from medgraph_api.services.extraction import DocumentExtractionService
 from medgraph_api.services.rag import PatientRagQueryService
@@ -78,3 +79,27 @@ def get_summary_service() -> BasicAISummaryService:
 
 def get_timeline_event_extraction_service() -> BasicTimelineEventExtractionService:
     return BasicTimelineEventExtractionService()
+
+
+def get_document_processing_service(
+    documents: DocumentRepository = Depends(get_document_repository),
+    document_chunks: DocumentChunkRepository = Depends(get_document_chunk_repository),
+    timeline_events: TimelineEventRepository = Depends(get_timeline_event_repository),
+    extraction_service: DocumentExtractionService = Depends(get_document_extraction_service),
+    chunking_service: TextChunkingService = Depends(get_text_chunking_service),
+    embedding_service: HashingEmbeddingService = Depends(get_embedding_service),
+    summary_service: BasicAISummaryService = Depends(get_summary_service),
+    timeline_extraction_service: BasicTimelineEventExtractionService = Depends(
+        get_timeline_event_extraction_service
+    ),
+) -> DocumentProcessingService:
+    return DocumentProcessingService(
+        documents=documents,
+        document_chunks=document_chunks,
+        timeline_events=timeline_events,
+        extraction_service=extraction_service,
+        chunking_service=chunking_service,
+        embedding_service=embedding_service,
+        summary_service=summary_service,
+        timeline_extraction_service=timeline_extraction_service,
+    )
