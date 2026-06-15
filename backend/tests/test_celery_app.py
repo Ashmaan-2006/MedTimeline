@@ -13,6 +13,7 @@ def test_celery_app_uses_configured_broker_and_serialization() -> None:
     assert celery_app.conf.task_serializer == "json"
     assert celery_app.conf.result_serializer == "json"
     assert celery_app.conf.accept_content == ["json"]
+    assert "medgraph_api.tasks.document_tasks" in celery_app.conf.imports
     assert celery_app.conf.result_expires == 3600
     assert celery_app.conf.task_track_started is True
     assert celery_app.conf.task_acks_late is True

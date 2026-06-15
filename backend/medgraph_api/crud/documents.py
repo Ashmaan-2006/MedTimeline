@@ -11,6 +11,9 @@ class DocumentRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def get(self, document_id: UUID) -> Document | None:
+        return self.db.get(Document, document_id)
+
     def create(self, payload: DocumentCreate) -> Document:
         document = Document(**payload.model_dump())
         self.db.add(document)

@@ -14,6 +14,7 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
+    imports=("medgraph_api.tasks.document_tasks",),
     result_expires=3600,
     task_track_started=True,
     task_acks_late=True,
