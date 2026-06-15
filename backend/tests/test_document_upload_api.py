@@ -7,16 +7,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from medgraph_api.api.deps import (
-    get_document_chunk_repository,
     get_document_repository,
     get_patient_repository,
-    get_timeline_event_repository,
     get_upload_storage,
 )
-from medgraph_api.schemas.document_chunk import DocumentChunkCreate
 from medgraph_api.main import app
 from medgraph_api.schemas.document import DocumentCreate, DocumentProcessingUpdate
-from medgraph_api.schemas.timeline_event import TimelineEventCreate
 from medgraph_api.services.storage import LocalUploadStorage
 
 
@@ -102,30 +98,6 @@ class FakeDocumentRepository:
         return document
 
 
-class FakeDocumentChunkRepository:
-    def __init__(self) -> None:
-        self.document_id: UUID | None = None
-        self.chunks: list[DocumentChunkCreate] = []
-
-    def replace_for_document(
-        self,
-        document_id: UUID,
-        payloads: list[DocumentChunkCreate],
-    ) -> list[DocumentChunkCreate]:
-        self.document_id = document_id
-        self.chunks = payloads
-        return payloads
-
-
-class FakeTimelineEventRepository:
-    def __init__(self) -> None:
-        self.events: list[TimelineEventCreate] = []
-
-    def create_many(self, payloads: list[TimelineEventCreate]) -> list[TimelineEventCreate]:
-        self.events.extend(payloads)
-        return payloads
-
-
 @pytest.fixture
 def patient() -> FakePatient:
     now = datetime.now(UTC)
@@ -144,23 +116,31 @@ def document_repository() -> FakeDocumentRepository:
     return FakeDocumentRepository()
 
 
-@pytest.fixture
-def document_chunk_repository() -> FakeDocumentChunkRepository:
-    return FakeDocumentChunkRepository()
+class FakeAsyncResult:
+    id = "task-upload-123"
+
+
+class FakeProcessDocumentTask:
+    def __init__(self) -> None:
+        self.document_ids: list[str] = []
+
+    def delay(self, document_id: str) -> FakeAsyncResult:
+        self.document_ids.append(document_id)
+        return FakeAsyncResult()
 
 
 @pytest.fixture
-def timeline_event_repository() -> FakeTimelineEventRepository:
-    return FakeTimelineEventRepository()
+def process_document_task() -> FakeProcessDocumentTask:
+    return FakeProcessDocumentTask()
 
 
 @pytest.fixture
 def client(
     tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
     patient: FakePatient,
     document_repository: FakeDocumentRepository,
-    document_chunk_repository: FakeDocumentChunkRepository,
-    timeline_event_repository: FakeTimelineEventRepository,
+    process_document_task: FakeProcessDocumentTask,
 ) -> Iterator[TestClient]:
     repository = FakePatientRepository(patient)
     storage = LocalUploadStorage(upload_dir=str(tmp_path / "uploads"))
@@ -174,17 +154,13 @@ def client(
     def override_document_repository() -> Iterator[FakeDocumentRepository]:
         yield document_repository
 
-    def override_document_chunk_repository() -> Iterator[FakeDocumentChunkRepository]:
-        yield document_chunk_repository
-
-    def override_timeline_event_repository() -> Iterator[FakeTimelineEventRepository]:
-        yield timeline_event_repository
-
     app.dependency_overrides[get_patient_repository] = override_patient_repository
     app.dependency_overrides[get_document_repository] = override_document_repository
-    app.dependency_overrides[get_document_chunk_repository] = override_document_chunk_repository
-    app.dependency_overrides[get_timeline_event_repository] = override_timeline_event_repository
     app.dependency_overrides[get_upload_storage] = override_upload_storage
+    monkeypatch.setattr(
+        "medgraph_api.api.routes.documents.process_document_task",
+        process_document_task,
+    )
     try:
         yield TestClient(app)
     finally:
@@ -195,8 +171,7 @@ def test_upload_patient_document(
     client: TestClient,
     patient: FakePatient,
     document_repository: FakeDocumentRepository,
-    document_chunk_repository: FakeDocumentChunkRepository,
-    timeline_event_repository: FakeTimelineEventRepository,
+    process_document_task: FakeProcessDocumentTask,
 ) -> None:
     response = client.post(
         f"/patients/{patient.id}/documents",
@@ -210,32 +185,21 @@ def test_upload_patient_document(
     assert body["filename"] == "note.txt"
     assert body["content_type"] == "text/plain"
     assert body["storage_path"].endswith("note.txt")
-    assert body["extracted_text"] == "Patient reports chest discomfort."
-    assert body["summary"] == "Patient reports chest discomfort."
-    assert body["processing_status"] == "completed"
+    assert body["extracted_text"] is None
+    assert body["summary"] is None
+    assert body["processing_status"] == "queued"
     assert body["processing_error"] is None
-    assert body["processing_started_at"] is not None
-    assert body["processing_completed_at"] is not None
-    assert body["celery_task_id"] is None
-    assert body["processing_attempts"] == 1
+    assert body["processing_started_at"] is None
+    assert body["processing_completed_at"] is None
+    assert body["celery_task_id"] == "task-upload-123"
+    assert body["processing_attempts"] == 0
     assert len(document_repository.documents) == 1
     assert document_repository.documents[0].storage_path == body["storage_path"]
     assert document_repository.documents[0].summary == body["summary"]
-    assert document_repository.documents[0].processing_status == "completed"
-    assert document_repository.documents[0].processing_attempts == 1
-    assert document_chunk_repository.document_id == document_repository.documents[0].id
-    assert len(document_chunk_repository.chunks) == 1
-    assert document_chunk_repository.chunks[0].patient_id == patient.id
-    assert document_chunk_repository.chunks[0].document_id == document_repository.documents[0].id
-    assert document_chunk_repository.chunks[0].chunk_index == 0
-    assert document_chunk_repository.chunks[0].content == "Patient reports chest discomfort."
-    assert len(document_chunk_repository.chunks[0].embedding) == 384
-    assert document_chunk_repository.chunks[0].embedding_model == "local-hashing-embedding-v1"
-    assert document_chunk_repository.chunks[0].token_count == 4
-    assert document_chunk_repository.chunks[0].chunk_metadata == {"char_start": 0, "char_end": 33}
-    assert len(timeline_event_repository.events) == 1
-    assert timeline_event_repository.events[0].event_type == "symptom"
-    assert timeline_event_repository.events[0].source_document_id == document_repository.documents[0].id
+    assert document_repository.documents[0].processing_status == "queued"
+    assert document_repository.documents[0].celery_task_id == "task-upload-123"
+    assert document_repository.documents[0].processing_attempts == 0
+    assert process_document_task.document_ids == [body["id"]]
 
 
 def test_list_patient_documents(

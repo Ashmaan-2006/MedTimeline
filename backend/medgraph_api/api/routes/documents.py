@@ -4,23 +4,26 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from medgraph_api.api.deps import (
-    get_document_processing_service,
     get_document_repository,
     get_patient_repository,
     get_upload_storage,
 )
 from medgraph_api.crud.documents import DocumentRepository
 from medgraph_api.crud.patients import PatientRepository
-from medgraph_api.schemas.document import DocumentCreate, DocumentUploadRead
-from medgraph_api.services.document_processing import DocumentProcessingService
+from medgraph_api.schemas.document import (
+    DocumentCreate,
+    DocumentProcessingStatus,
+    DocumentProcessingUpdate,
+    DocumentUploadRead,
+)
 from medgraph_api.services.storage import LocalUploadStorage
+from medgraph_api.tasks.document_tasks import process_document_task
 
 router = APIRouter(prefix="/patients/{patient_id}/documents", tags=["documents"])
 
 PatientRepo = Annotated[PatientRepository, Depends(get_patient_repository)]
 DocumentRepo = Annotated[DocumentRepository, Depends(get_document_repository)]
 UploadStorage = Annotated[LocalUploadStorage, Depends(get_upload_storage)]
-DocumentProcessor = Annotated[DocumentProcessingService, Depends(get_document_processing_service)]
 
 
 @router.get("", response_model=list[DocumentUploadRead])
@@ -44,7 +47,6 @@ def upload_patient_document(
     patients: PatientRepo,
     documents: DocumentRepo,
     storage: UploadStorage,
-    document_processor: DocumentProcessor,
     file: UploadFile = File(...),
 ) -> DocumentUploadRead:
     patient = patients.get(patient_id)
@@ -64,4 +66,15 @@ def upload_patient_document(
         )
     )
 
-    return document_processor.process(document)
+    queued_task = process_document_task.delay(str(document.id))
+    return documents.update_processing(
+        document,
+        DocumentProcessingUpdate(
+            extracted_text=document.extracted_text,
+            summary=document.summary,
+            processing_status=DocumentProcessingStatus.QUEUED,
+            processing_error=None,
+            celery_task_id=queued_task.id,
+            processing_attempts=document.processing_attempts,
+        ),
+    )
