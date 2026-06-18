@@ -28,6 +28,10 @@ class DocumentChunkRepository:
 
         return chunks
 
+    def delete_for_document(self, document_id: UUID) -> None:
+        self.db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
+        self.db.commit()
+
     def list_for_document(
         self,
         document_id: UUID,

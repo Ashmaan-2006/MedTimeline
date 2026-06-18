@@ -7,8 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from medgraph_api.api.deps import (
+    get_document_chunk_repository,
     get_document_repository,
     get_patient_repository,
+    get_timeline_event_repository,
     get_upload_storage,
 )
 from medgraph_api.main import app
@@ -104,6 +106,22 @@ class FakeDocumentRepository:
         return document
 
 
+class FakeDocumentChunkRepository:
+    def __init__(self) -> None:
+        self.deleted_document_ids: list[UUID] = []
+
+    def delete_for_document(self, document_id: UUID) -> None:
+        self.deleted_document_ids.append(document_id)
+
+
+class FakeTimelineEventRepository:
+    def __init__(self) -> None:
+        self.deleted_document_ids: list[UUID] = []
+
+    def delete_for_document(self, document_id: UUID) -> None:
+        self.deleted_document_ids.append(document_id)
+
+
 @pytest.fixture
 def patient() -> FakePatient:
     now = datetime.now(UTC)
@@ -120,6 +138,16 @@ def patient() -> FakePatient:
 @pytest.fixture
 def document_repository() -> FakeDocumentRepository:
     return FakeDocumentRepository()
+
+
+@pytest.fixture
+def document_chunk_repository() -> FakeDocumentChunkRepository:
+    return FakeDocumentChunkRepository()
+
+
+@pytest.fixture
+def timeline_event_repository() -> FakeTimelineEventRepository:
+    return FakeTimelineEventRepository()
 
 
 class FakeAsyncResult:
@@ -146,6 +174,8 @@ def client(
     monkeypatch: pytest.MonkeyPatch,
     patient: FakePatient,
     document_repository: FakeDocumentRepository,
+    document_chunk_repository: FakeDocumentChunkRepository,
+    timeline_event_repository: FakeTimelineEventRepository,
     process_document_task: FakeProcessDocumentTask,
 ) -> Iterator[TestClient]:
     repository = FakePatientRepository(patient)
@@ -160,8 +190,16 @@ def client(
     def override_document_repository() -> Iterator[FakeDocumentRepository]:
         yield document_repository
 
+    def override_document_chunk_repository() -> Iterator[FakeDocumentChunkRepository]:
+        yield document_chunk_repository
+
+    def override_timeline_event_repository() -> Iterator[FakeTimelineEventRepository]:
+        yield timeline_event_repository
+
     app.dependency_overrides[get_patient_repository] = override_patient_repository
     app.dependency_overrides[get_document_repository] = override_document_repository
+    app.dependency_overrides[get_document_chunk_repository] = override_document_chunk_repository
+    app.dependency_overrides[get_timeline_event_repository] = override_timeline_event_repository
     app.dependency_overrides[get_upload_storage] = override_upload_storage
     monkeypatch.setattr(
         "medgraph_api.api.routes.documents.process_document_task",
@@ -325,6 +363,90 @@ def test_get_patient_document_processing_status_returns_404_for_other_patient_do
     response = client.get(f"/patients/{patient.id}/documents/{document.id}/status")
 
     assert response.status_code == 404
+
+
+def test_reprocess_patient_document_queues_new_task_and_clears_old_outputs(
+    client: TestClient,
+    patient: FakePatient,
+    document_repository: FakeDocumentRepository,
+    document_chunk_repository: FakeDocumentChunkRepository,
+    timeline_event_repository: FakeTimelineEventRepository,
+    process_document_task: FakeProcessDocumentTask,
+) -> None:
+    now = datetime.now(UTC)
+    document = FakeDocument(
+        id=uuid4(),
+        patient_id=patient.id,
+        filename="note.txt",
+        content_type="text/plain",
+        storage_path="storage/uploads/note.txt",
+        extracted_text="Old extracted text.",
+        summary="Old summary.",
+        processing_status="failed",
+        processing_error="Old failure.",
+        processing_started_at=now,
+        processing_completed_at=now,
+        celery_task_id="old-task-id",
+        processing_attempts=2,
+        created_at=now,
+        updated_at=now,
+    )
+    document_repository.documents.append(document)
+
+    response = client.post(f"/patients/{patient.id}/documents/{document.id}/reprocess")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(document.id)
+    assert body["processing_status"] == "queued"
+    assert body["processing_error"] is None
+    assert body["processing_started_at"] is None
+    assert body["processing_completed_at"] is None
+    assert body["celery_task_id"] == "task-upload-123"
+    assert body["extracted_text"] is None
+    assert body["summary"] is None
+    assert body["processing_attempts"] == 2
+    assert document_chunk_repository.deleted_document_ids == [document.id]
+    assert timeline_event_repository.deleted_document_ids == [document.id]
+    assert process_document_task.document_ids == [str(document.id)]
+
+
+@pytest.mark.parametrize("processing_status", ["queued", "processing"])
+def test_reprocess_patient_document_rejects_active_documents(
+    client: TestClient,
+    patient: FakePatient,
+    document_repository: FakeDocumentRepository,
+    document_chunk_repository: FakeDocumentChunkRepository,
+    timeline_event_repository: FakeTimelineEventRepository,
+    process_document_task: FakeProcessDocumentTask,
+    processing_status: str,
+) -> None:
+    now = datetime.now(UTC)
+    document = FakeDocument(
+        id=uuid4(),
+        patient_id=patient.id,
+        filename="note.txt",
+        content_type="text/plain",
+        storage_path="storage/uploads/note.txt",
+        extracted_text=None,
+        summary=None,
+        processing_status=processing_status,
+        processing_error=None,
+        processing_started_at=now,
+        processing_completed_at=None,
+        celery_task_id="active-task-id",
+        processing_attempts=1,
+        created_at=now,
+        updated_at=now,
+    )
+    document_repository.documents.append(document)
+
+    response = client.post(f"/patients/{patient.id}/documents/{document.id}/reprocess")
+
+    assert response.status_code == 409
+    assert document_chunk_repository.deleted_document_ids == []
+    assert timeline_event_repository.deleted_document_ids == []
+    assert process_document_task.document_ids == []
 
 
 def test_upload_patient_document_returns_404_for_missing_patient(client: TestClient) -> None:

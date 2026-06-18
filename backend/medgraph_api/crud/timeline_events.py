@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from medgraph_api.models.timeline_event import TimelineEvent
@@ -20,6 +20,10 @@ class TimelineEventRepository:
             self.db.refresh(event)
 
         return events
+
+    def delete_for_document(self, document_id: UUID) -> None:
+        self.db.execute(delete(TimelineEvent).where(TimelineEvent.source_document_id == document_id))
+        self.db.commit()
 
     def list_for_patient(
         self,
