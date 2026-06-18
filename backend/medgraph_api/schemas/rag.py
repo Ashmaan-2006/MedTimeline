@@ -35,8 +35,21 @@ class PatientRagSourceRead(BaseModel):
     created_at: datetime
 
 
+class PatientRagGraphEvidenceRead(BaseModel):
+    citation_label: str
+    source_label: str
+    source_name: str
+    relationship_type: str
+    target_label: str
+    target_name: str
+    evidence: str | None
+    confidence: float | None
+    source_chunk_id: str | None
+
+
 class PatientRagQueryRead(BaseModel):
     patient_id: UUID
     question: str
     answer: str
     sources: list[PatientRagSourceRead]
+    graph_evidence: list[PatientRagGraphEvidenceRead]

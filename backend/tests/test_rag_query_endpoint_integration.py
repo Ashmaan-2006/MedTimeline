@@ -6,7 +6,11 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
-from medgraph_api.api.deps import get_document_chunk_repository, get_patient_repository
+from medgraph_api.api.deps import (
+    get_clinical_graph_query_service,
+    get_document_chunk_repository,
+    get_patient_repository,
+)
 from medgraph_api.main import app
 from medgraph_api.services.retrieval_filters import RetrievalFilters
 
@@ -81,6 +85,11 @@ class FakeDocumentChunkRepository:
         return filtered_chunks[:limit]
 
 
+class FakeGraphQueryService:
+    def get_relationships_for_patient(self, patient_id: str) -> list:
+        return []
+
+
 def make_patient() -> FakePatient:
     now = datetime.now(UTC)
     return FakePatient(
@@ -106,6 +115,7 @@ def client_with_repositories(
 
     app.dependency_overrides[get_patient_repository] = override_patient_repository
     app.dependency_overrides[get_document_chunk_repository] = override_document_chunk_repository
+    app.dependency_overrides[get_clinical_graph_query_service] = FakeGraphQueryService
     try:
         yield TestClient(app)
     finally:

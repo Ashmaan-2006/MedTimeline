@@ -7,7 +7,11 @@ from fastapi.testclient import TestClient
 
 from medgraph_api.api.deps import get_patient_rag_query_service, get_patient_repository
 from medgraph_api.main import app
-from medgraph_api.services.rag import PatientRagCitationSource, PatientRagQueryResult
+from medgraph_api.services.rag import (
+    PatientRagCitationSource,
+    PatientRagGraphEvidence,
+    PatientRagQueryResult,
+)
 from medgraph_api.services.retrieval_filters import RetrievalFilters
 from medgraph_api.services.similarity_search import PatientDocumentSearchResult
 
@@ -67,6 +71,19 @@ class FakeRagQueryService:
                     token_count=self.source.token_count,
                     chunk_metadata=self.source.chunk_metadata,
                     created_at=self.source.created_at,
+                )
+            ],
+            graph_evidence=[
+                PatientRagGraphEvidence(
+                    citation_label="[G1]",
+                    source_label="Medication",
+                    source_name="metoprolol",
+                    relationship_type="WORSENED_AFTER",
+                    target_label="Symptom",
+                    target_name="chest pain",
+                    evidence="Chest pain worsened after medication change.",
+                    confidence=0.72,
+                    source_chunk_id=str(self.source.chunk_id),
                 )
             ],
         )
@@ -129,6 +146,8 @@ def test_query_patient_documents_returns_answer_and_sources() -> None:
     assert body["sources"][0]["patient_id"] == str(patient.id)
     assert body["sources"][0]["chunk_index"] == 1
     assert body["sources"][0]["content"] == "Chest pain worsened after medication change."
+    assert body["graph_evidence"][0]["citation_label"] == "[G1]"
+    assert body["graph_evidence"][0]["relationship_type"] == "WORSENED_AFTER"
     assert rag_query_service.last_patient_id == patient.id
     assert rag_query_service.last_question == "Why did symptoms worsen?"
     assert rag_query_service.last_limit == 3

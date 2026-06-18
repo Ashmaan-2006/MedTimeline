@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from medgraph_api.services.rag import PatientRagQueryService
 from medgraph_api.services.retrieval_filters import RetrievalFilters
 from medgraph_api.services.similarity_search import PatientDocumentSearchResult
+from medgraph_api.services.graph_query_service import GraphRelationship
 
 
 @dataclass
@@ -27,6 +28,16 @@ class FakeSimilaritySearchService:
         self.last_limit = limit
         self.last_filters = filters
         return self.results[:limit]
+
+
+@dataclass
+class FakeGraphQueryService:
+    relationships: list[GraphRelationship]
+    last_patient_id: str | None = None
+
+    def get_relationships_for_patient(self, patient_id: str) -> list[GraphRelationship]:
+        self.last_patient_id = patient_id
+        return self.relationships
 
 
 def test_rag_service_returns_grounded_answer_with_sources() -> None:
@@ -60,6 +71,7 @@ def test_rag_service_returns_grounded_answer_with_sources() -> None:
     assert result.sources[0].chunk_id == source.chunk_id
     assert result.answer.startswith("Based on the retrieved patient documents:")
     assert "worsening chest pain after medication change [1]." in result.answer
+    assert result.graph_evidence == []
 
 
 def test_rag_service_adds_ordered_citations_for_multiple_sources() -> None:
@@ -115,6 +127,7 @@ def test_rag_service_returns_no_evidence_answer_without_sources() -> None:
     assert result.patient_id == patient_id
     assert result.answer == "No relevant patient document evidence was found for this question."
     assert result.sources == []
+    assert result.graph_evidence == []
 
 
 def test_rag_service_passes_retrieval_filters_to_similarity_search() -> None:
@@ -129,3 +142,77 @@ def test_rag_service_passes_retrieval_filters_to_similarity_search() -> None:
     )
 
     assert similarity_search.last_filters == filters
+
+
+def test_rag_service_combines_vector_sources_with_graph_relationships() -> None:
+    patient_id = uuid4()
+    now = datetime.now(UTC)
+    source = PatientDocumentSearchResult(
+        chunk_id=uuid4(),
+        document_id=uuid4(),
+        patient_id=patient_id,
+        chunk_index=0,
+        content="Patient reported shortness of breath after metoprolol change.",
+        embedding_model="local-hashing-embedding-v1",
+        token_count=8,
+        chunk_metadata={"char_start": 0, "char_end": 64},
+        created_at=now,
+    )
+    graph_query = FakeGraphQueryService(
+        relationships=[
+            GraphRelationship(
+                source_label="Medication",
+                source_name="metoprolol",
+                relationship_type="WORSENED_AFTER",
+                target_label="Symptom",
+                target_name="shortness of breath",
+                evidence="Patient reported shortness of breath after medication change",
+                confidence=0.72,
+                source_chunk_id=str(source.chunk_id),
+            )
+        ]
+    )
+
+    result = PatientRagQueryService(
+        similarity_search=FakeSimilaritySearchService(results=[source]),
+        graph_query=graph_query,
+    ).answer_question(
+        patient_id=patient_id,
+        question="Did symptoms worsen after the medication change?",
+    )
+
+    assert graph_query.last_patient_id == str(patient_id)
+    assert result.answer.startswith("Based on the retrieved patient documents and clinical graph:")
+    assert "metoprolol worsened after shortness of breath" in result.answer
+    assert result.graph_evidence[0].citation_label == "[G1]"
+    assert result.graph_evidence[0].relationship_type == "WORSENED_AFTER"
+
+
+def test_rag_service_can_answer_from_graph_when_vector_search_has_no_sources() -> None:
+    patient_id = uuid4()
+    graph_query = FakeGraphQueryService(
+        relationships=[
+            GraphRelationship(
+                source_label="Medication",
+                source_name="metoprolol",
+                relationship_type="WORSENED_AFTER",
+                target_label="Symptom",
+                target_name="dyspnea",
+                evidence="Dyspnea worsened after metoprolol dose increase",
+                confidence=0.69,
+                source_chunk_id="chunk-1",
+            )
+        ]
+    )
+
+    result = PatientRagQueryService(
+        similarity_search=FakeSimilaritySearchService(results=[]),
+        graph_query=graph_query,
+    ).answer_question(
+        patient_id=patient_id,
+        question="Did dyspnea worsen after metoprolol?",
+    )
+
+    assert result.sources == []
+    assert len(result.graph_evidence) == 1
+    assert "clinical graph" in result.answer

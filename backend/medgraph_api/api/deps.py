@@ -69,12 +69,18 @@ def get_patient_document_similarity_search_service(
     )
 
 
+def get_clinical_graph_query_service() -> Generator[ClinicalGraphQueryService, None, None]:
+    with neo4j_session() as session:
+        yield ClinicalGraphQueryService(session)
+
+
 def get_patient_rag_query_service(
     similarity_search: PatientDocumentSimilaritySearchService = Depends(
         get_patient_document_similarity_search_service
     ),
+    graph_query: ClinicalGraphQueryService = Depends(get_clinical_graph_query_service),
 ) -> PatientRagQueryService:
-    return PatientRagQueryService(similarity_search=similarity_search)
+    return PatientRagQueryService(similarity_search=similarity_search, graph_query=graph_query)
 
 
 def get_summary_service() -> BasicAISummaryService:
@@ -88,11 +94,6 @@ def get_timeline_event_extraction_service() -> BasicTimelineEventExtractionServi
 def get_clinical_graph_sync_service() -> Generator[ClinicalGraphSyncService, None, None]:
     with neo4j_session() as session:
         yield ClinicalGraphSyncService(ClinicalGraphRepository(session))
-
-
-def get_clinical_graph_query_service() -> Generator[ClinicalGraphQueryService, None, None]:
-    with neo4j_session() as session:
-        yield ClinicalGraphQueryService(session)
 
 
 def get_document_processing_service(
