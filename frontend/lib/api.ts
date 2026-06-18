@@ -46,6 +46,45 @@ export type PatientDocument = {
   updated_at: string;
 };
 
+export type PatientGraphSummary = {
+  patient_id: string;
+  document_count: number;
+  chunk_count: number;
+  entity_count: number;
+  relationship_count: number;
+};
+
+export type PatientGraphEntity = {
+  label: string;
+  normalized_name: string;
+  name: string | null;
+  mention_count: number;
+  evidence_count: number;
+  latest_seen_at: string | null;
+};
+
+export type PatientGraphRelationship = {
+  source_label: string;
+  source_name: string;
+  relationship_type: string;
+  target_label: string;
+  target_name: string;
+  evidence: string | null;
+  confidence: number | null;
+  source_chunk_id: string | null;
+};
+
+export type PatientGraphEvidenceChunk = {
+  chunk_id: string;
+  document_id: string;
+  chunk_index: number | null;
+  content: string;
+  evidence: string | null;
+  confidence: number | null;
+  filename: string | null;
+  created_at: string | null;
+};
+
 async function fetchJson<T>(path: string): Promise<T | null> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: "no-store",
@@ -74,4 +113,29 @@ export function getPatientTimelineEvents(patientId: string): Promise<TimelineEve
 
 export function getPatientDocuments(patientId: string): Promise<PatientDocument[] | null> {
   return fetchJson<PatientDocument[]>(`/patients/${encodeURIComponent(patientId)}/documents?limit=25`);
+}
+
+export function getPatientGraphSummary(patientId: string): Promise<PatientGraphSummary | null> {
+  return fetchJson<PatientGraphSummary>(`/patients/${encodeURIComponent(patientId)}/graph/summary`);
+}
+
+export function getPatientGraphEntities(patientId: string): Promise<PatientGraphEntity[] | null> {
+  return fetchJson<PatientGraphEntity[]>(`/patients/${encodeURIComponent(patientId)}/graph/entities`);
+}
+
+export function getPatientGraphRelationships(
+  patientId: string,
+): Promise<PatientGraphRelationship[] | null> {
+  return fetchJson<PatientGraphRelationship[]>(
+    `/patients/${encodeURIComponent(patientId)}/graph/relationships`,
+  );
+}
+
+export function getPatientGraphEntityEvidence(
+  patientId: string,
+  entityName: string,
+): Promise<PatientGraphEvidenceChunk[] | null> {
+  return fetchJson<PatientGraphEvidenceChunk[]>(
+    `/patients/${encodeURIComponent(patientId)}/graph/entity/${encodeURIComponent(entityName)}/evidence`,
+  );
 }

@@ -1,8 +1,15 @@
 import { notFound } from "next/navigation";
 
-import { DocumentUploadForm } from "@/components/document-upload-form";
-import { RagChatPanel } from "@/components/rag-chat-panel";
-import { getPatient, getPatientDocuments, getPatientTimelineEvents, type PatientDocument } from "@/lib/api";
+import { PatientWorkspaceTabs } from "@/components/patient-workspace-tabs";
+import {
+  getPatient,
+  getPatientDocuments,
+  getPatientGraphEntities,
+  getPatientGraphEntityEvidence,
+  getPatientGraphRelationships,
+  getPatientGraphSummary,
+  getPatientTimelineEvents,
+} from "@/lib/api";
 
 type PatientProfilePageProps = {
   params: Promise<{
@@ -36,47 +43,6 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function formatEventType(value: string) {
-  return value
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function documentStatusLabel(document: PatientDocument) {
-  switch (document.processing_status) {
-    case "queued":
-      return "Queued";
-    case "processing":
-      return "Processing";
-    case "completed":
-      return "Completed";
-    case "failed":
-      return "Failed";
-    default:
-      return "Uploaded";
-  }
-}
-
-function documentStatusClassName(document: PatientDocument) {
-  return `document-status document-status-${document.processing_status}`;
-}
-
-function documentStatusMessage(document: PatientDocument) {
-  switch (document.processing_status) {
-    case "queued":
-      return "Queued for processing.";
-    case "processing":
-      return "Processing document...";
-    case "completed":
-      return document.summary ?? "Completed. No summary was generated for this document.";
-    case "failed":
-      return document.processing_error ?? "Processing failed.";
-    default:
-      return "Uploaded and waiting to be queued.";
-  }
-}
-
 export default async function PatientProfilePage({ params }: PatientProfilePageProps) {
   const { patientId } = await params;
   const [patient, documents, timelineEvents] = await Promise.all([
@@ -95,6 +61,24 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
     (document) => document.processing_status === "completed",
   );
   const events = timelineEvents ?? [];
+  const [graphSummary, graphEntities, graphRelationships] = await Promise.all([
+    getPatientGraphSummary(patient.id).catch(() => null),
+    getPatientGraphEntities(patient.id).catch(() => []),
+    getPatientGraphRelationships(patient.id).catch(() => []),
+  ]);
+  const evidenceEntities = (graphEntities ?? []).slice(0, 6);
+  const graphEvidenceChunks = (
+    await Promise.all(
+      evidenceEntities.map((entity) =>
+        getPatientGraphEntityEvidence(patient.id, entity.normalized_name).catch(() => []),
+      ),
+    )
+  )
+    .flatMap((chunks) => chunks ?? [])
+    .filter(
+      (chunk, index, chunks) =>
+        chunks.findIndex((candidate) => candidate.chunk_id === chunk.chunk_id) === index,
+    );
 
   return (
     <>
@@ -152,67 +136,16 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
         </div>
       </section>
 
-      <section className="panel upload-panel">
-        <h2 className="panel-title">Upload Document</h2>
-        <DocumentUploadForm patientId={patient.id} />
-      </section>
-
-      <section className="panel document-panel">
-        <h2 className="panel-title">Extracted Summaries</h2>
-        {patientDocuments.length > 0 ? (
-          <div className="document-summary-list">
-            {patientDocuments.map((document) => (
-              <article className="document-summary" key={document.id}>
-                <div className="document-summary-header">
-                  <div>
-                    <h3>{document.filename}</h3>
-                    <time>{formatDateTime(document.created_at)}</time>
-                  </div>
-                  <span className={documentStatusClassName(document)}>
-                    {documentStatusLabel(document)}
-                  </span>
-                </div>
-                <p
-                  className={
-                    document.processing_status === "failed"
-                      ? "document-summary-message document-summary-message-error"
-                      : "document-summary-message"
-                  }
-                >
-                  {documentStatusMessage(document)}
-                </p>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">Uploaded document summaries will appear here.</div>
-        )}
-      </section>
-
-      <RagChatPanel documents={completedDocuments} patientId={patient.id} />
-
-      <section className="panel timeline-panel">
-        <h2 className="panel-title">Timeline Events</h2>
-        {events.length > 0 ? (
-          <ol className="timeline-list">
-            {events.map((event) => (
-              <li className="timeline-item" key={event.id}>
-                <div className="timeline-marker" aria-hidden="true" />
-                <div>
-                  <div className="timeline-item-header">
-                    <span className="event-type">{formatEventType(event.event_type)}</span>
-                    <time>{formatDateTime(event.occurred_at)}</time>
-                  </div>
-                  <h3>{event.title}</h3>
-                  {event.description !== null ? <p>{event.description}</p> : null}
-                </div>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <div className="empty-state">No timeline events have been extracted for this patient.</div>
-        )}
-      </section>
+      <PatientWorkspaceTabs
+        completedDocuments={completedDocuments}
+        documents={patientDocuments}
+        graphEntities={graphEntities ?? []}
+        graphEvidenceChunks={graphEvidenceChunks}
+        graphRelationships={graphRelationships ?? []}
+        graphSummary={graphSummary}
+        patientId={patient.id}
+        timelineEvents={events}
+      />
     </>
   );
 }

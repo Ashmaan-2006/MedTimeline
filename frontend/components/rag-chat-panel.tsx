@@ -22,6 +22,19 @@ type RagResponse = {
   question: string;
   answer: string;
   sources: RagSource[];
+  graph_evidence: RagGraphEvidence[];
+};
+
+type RagGraphEvidence = {
+  citation_label: string;
+  source_label: string;
+  source_name: string;
+  relationship_type: string;
+  target_label: string;
+  target_name: string;
+  evidence: string | null;
+  confidence: number | null;
+  source_chunk_id: string | null;
 };
 
 type ChatMessage =
@@ -35,6 +48,7 @@ type ChatMessage =
       role: "assistant";
       content: string;
       sources: RagSource[];
+      graphEvidence: RagGraphEvidence[];
     };
 
 type RagChatPanelProps = {
@@ -145,6 +159,7 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
         role: "assistant",
         content: ragResponse.answer,
         sources: ragResponse.sources,
+        graphEvidence: ragResponse.graph_evidence ?? [],
       },
     ]);
     setStatus("idle");
@@ -192,6 +207,29 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
                       </details>
                     );
                   })}
+                </div>
+              ) : null}
+              {message.role === "assistant" && message.graphEvidence.length > 0 ? (
+                <div className="citation-list">
+                  {message.graphEvidence.map((evidence) => (
+                    <details
+                      className="citation-item graph-citation-item"
+                      key={`${evidence.citation_label}-${evidence.source_name}-${evidence.target_name}`}
+                    >
+                      <summary>
+                        <span>{evidence.citation_label}</span>
+                        {evidence.source_name} {"->"} {evidence.relationship_type} {"->"}{" "}
+                        {evidence.target_name}
+                      </summary>
+                      <p>{evidence.evidence ?? "Relationship evidence was found in the clinical graph."}</p>
+                      <div className="citation-meta">
+                        {evidence.source_label} to {evidence.target_label}
+                        {evidence.confidence !== null
+                          ? ` - ${Math.round(evidence.confidence * 100)}% confidence`
+                          : ""}
+                      </div>
+                    </details>
+                  ))}
                 </div>
               ) : null}
             </article>
