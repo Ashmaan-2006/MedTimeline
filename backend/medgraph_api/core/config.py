@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     neo4j_uri: str = "bolt://neo4j:7687"
     neo4j_username: str = "neo4j"
     neo4j_password: str = "password"
+    llm_provider: str = "openai"
+    reasoning_model: str = "gpt-4.1"
+    fast_model: str = "gpt-4.1-mini"
+    agent_max_steps: int = 8
+    agent_timeout_seconds: int = 60
+    openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
