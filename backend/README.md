@@ -1,4 +1,239 @@
-# Backend
+# MedGraph AI Backend
 
-FastAPI service for patient records, document ingestion, extraction, and timeline APIs.
+FastAPI service for patient records, asynchronous document processing, timeline extraction, hybrid RAG, and Neo4j-backed clinical graph retrieval.
 
+## Local Services
+
+Run the full stack from the repository root:
+
+```powershell
+docker compose up --build
+```
+
+Service URLs:
+
+| Service | URL | Notes |
+| --- | --- | --- |
+| Frontend | `http://localhost:3001` | Next.js clinical workspace |
+| Backend API | `http://localhost:8001` | FastAPI, proxied into frontend routes |
+| RabbitMQ UI | `http://localhost:15672` | Username `guest`, password `guest` |
+| Neo4j Browser | `http://localhost:7474` | Username `neo4j`, password from `.env` |
+
+The backend runs inside Docker on port `8000` and is exposed locally as `8001` to avoid common host port conflicts.
+
+## Environment
+
+Expected local variables:
+
+```env
+DATABASE_URL=postgresql+psycopg://medgraph:medgraph@postgres:5432/medgraph
+CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+CELERY_RESULT_BACKEND=rpc://
+NEO4J_URI=bolt://neo4j:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=password
+```
+
+Neo4j is configured in `docker-compose.yml` as:
+
+```yaml
+neo4j:
+  image: neo4j:5-community
+  ports:
+    - "7474:7474"
+    - "7687:7687"
+```
+
+## Document Processing Lifecycle
+
+Upload flow:
+
+```text
+FastAPI upload endpoint
+  -> store file metadata in Postgres
+  -> queue Celery task through RabbitMQ
+  -> worker extracts text
+  -> creates summary
+  -> chunks text
+  -> creates embeddings in pgvector
+  -> extracts timeline events
+  -> extracts clinical entities
+  -> extracts clinical relationships
+  -> writes Neo4j graph nodes and relationships
+```
+
+Processing status values:
+
+- `uploaded`
+- `queued`
+- `processing`
+- `completed`
+- `failed`
+
+Reprocessing flow:
+
+```text
+POST /patients/{patient_id}/documents/{document_id}/reprocess
+  -> reject active queued/processing documents
+  -> delete old Postgres chunks
+  -> delete old timeline events
+  -> delete old Neo4j document subgraph
+  -> preserve Patient node
+  -> queue fresh Celery processing task
+```
+
+The graph cleanup uses a document-scoped deletion. It removes the old `Document`, old `Chunk` nodes, and relationships with old `source_chunk_id` values, then rebuilds from current document output.
+
+## Clinical Graph Schema
+
+The complete graph schema is documented in:
+
+```text
+docs/clinical-graph-schema.md
+```
+
+Core nodes:
+
+- `Patient`
+- `Document`
+- `Chunk`
+- `ClinicalEvent`
+- `Symptom`
+- `Medication`
+- `Diagnosis`
+- `Procedure`
+- `LabTest`
+- `ECGFinding`
+
+Core relationships:
+
+- `(:Patient)-[:PATIENT_HAS_DOCUMENT]->(:Document)`
+- `(:Document)-[:DOCUMENT_HAS_CHUNK]->(:Chunk)`
+- `(:Chunk)-[:CHUNK_MENTIONS_ENTITY]->(:Symptom|Medication|Diagnosis|...)`
+- `(:Entity)-[:ENTITY_EVIDENCED_BY_CHUNK]->(:Chunk)`
+- `(:Medication)-[:WORSENED_AFTER|ASSOCIATED_WITH|STARTED_AT]->(:Symptom|ClinicalEvent)`
+
+Graph writes use `MERGE` for idempotency where possible. Reprocessing additionally clears the document-specific subgraph before rebuilding.
+
+## Example Cypher Queries
+
+Open Neo4j Browser at `http://localhost:7474`.
+
+List documents for a patient:
+
+```cypher
+MATCH (p:Patient {id: "PATIENT_UUID"})-[:PATIENT_HAS_DOCUMENT]->(d:Document)
+RETURN p.id, d.id, d.filename, d.processing_status
+ORDER BY d.created_at DESC;
+```
+
+Show chunks and mentioned entities:
+
+```cypher
+MATCH (:Patient {id: "PATIENT_UUID"})-[:PATIENT_HAS_DOCUMENT]->(:Document)
+  -[:DOCUMENT_HAS_CHUNK]->(c:Chunk)-[:CHUNK_MENTIONS_ENTITY]->(e)
+RETURN c.chunk_index, labels(e)[0] AS entity_type, e.normalized_name, c.content
+ORDER BY c.chunk_index;
+```
+
+Inspect extracted medication-symptom relationships:
+
+```cypher
+MATCH (m:Medication)-[r]->(s:Symptom)
+RETURN m.normalized_name, type(r), s.normalized_name, r.evidence, r.confidence
+ORDER BY r.confidence DESC;
+```
+
+Find evidence chunks for an entity:
+
+```cypher
+MATCH (e)-[r:ENTITY_EVIDENCED_BY_CHUNK]->(c:Chunk)<-[:DOCUMENT_HAS_CHUNK]-(d:Document)
+WHERE e.normalized_name = "metoprolol"
+RETURN labels(e)[0], e.normalized_name, d.filename, c.chunk_index, r.evidence, c.content;
+```
+
+Find paths between two entities:
+
+```cypher
+MATCH (source {normalized_name: "metoprolol"})
+MATCH (target {normalized_name: "shortness of breath"})
+MATCH path = shortestPath((source)-[*1..4]-(target))
+RETURN path;
+```
+
+## Graph API
+
+Patient-scoped graph endpoints:
+
+```text
+GET /patients/{patient_id}/graph/summary
+GET /patients/{patient_id}/graph/entities
+GET /patients/{patient_id}/graph/relationships
+GET /patients/{patient_id}/graph/entity/{entity_name}/evidence
+GET /patients/{patient_id}/graph/path?source=...&target=...
+```
+
+These endpoints power the frontend `Clinical Graph` tab.
+
+## Graph RAG Architecture
+
+Hybrid RAG flow:
+
+```text
+Question
+  -> pgvector similarity search
+  -> Neo4j relationship retrieval
+  -> merge chunk evidence + graph evidence
+  -> generate answer with document citations and graph citations
+```
+
+Example question:
+
+```text
+Did symptoms worsen after the medication change?
+```
+
+The answer context can include:
+
+- Chunks mentioning symptoms and medication changes
+- Graph relationships such as `Medication -[:WORSENED_AFTER]-> Symptom`
+- Evidence snippets from `ENTITY_EVIDENCED_BY_CHUNK`
+- Timeline events exposed separately through patient timeline APIs
+
+RAG responses include:
+
+- `sources`: document chunk citations like `[1]`
+- `graph_evidence`: graph relationship citations like `[G1]`
+
+## Test Coverage
+
+Run backend tests:
+
+```powershell
+python -m pytest backend\tests
+python -m ruff check backend
+```
+
+Graph pipeline coverage includes:
+
+| Area | Test file |
+| --- | --- |
+| Neo4j driver/session/health query | `backend/tests/test_neo4j_core.py` |
+| Patient/document/chunk graph sync | `backend/tests/test_clinical_graph_sync_service.py` |
+| Entity extraction validation | `backend/tests/test_entity_extraction_service.py` |
+| Relationship extraction validation | `backend/tests/test_relationship_extraction_service.py` |
+| Idempotent graph writes with `MERGE` | `backend/tests/test_clinical_graph_repository.py` |
+| Document reprocessing graph cleanup | `backend/tests/test_document_upload_api.py` |
+| Graph build during document processing | `backend/tests/test_document_processing_service.py` |
+| Hybrid vector + graph RAG | `backend/tests/test_rag_service.py` |
+| Graph API relationship responses | `backend/tests/test_graph_api.py` |
+
+## Known Limitations
+
+- The default entity and relationship extraction uses a local deterministic extractor for demo reliability. It is intentionally conservative and should be replaced with a provider-backed structured-output LLM for richer clinical extraction.
+- Entity normalization is string-based. It does not yet map ICD, SNOMED, RxNorm, LOINC, or UMLS identifiers.
+- Medication dose, route, frequency, negation, and temporal onset are not fully modeled yet.
+- Graph relationships are evidence-focused and should not be treated as clinical truth without human review.
+- Hybrid RAG uses lightweight answer synthesis. It cites retrieved context but does not yet use a production LLM with full prompt tracing.
+- Timeline events are stored in Postgres and displayed in the frontend; full event-to-entity graph linking is still an extension point.
+- This project is for engineering demonstration only and is not a medical device or clinical decision support system.

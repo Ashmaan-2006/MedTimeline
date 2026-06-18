@@ -85,6 +85,27 @@ def test_create_relationship_uses_match_and_merge() -> None:
     }
 
 
+def test_graph_writes_are_idempotent_by_using_merge_not_create() -> None:
+    session = RecordingSession()
+    repository = ClinicalGraphRepository(session)
+
+    repository.upsert_document_node("document-1", {"filename": "note.txt"})
+    repository.upsert_chunk_node("chunk-1", {"chunk_index": 0})
+    repository.create_relationship(
+        from_label="Document",
+        from_key="id",
+        from_value="document-1",
+        relationship_type="DOCUMENT_HAS_CHUNK",
+        to_label="Chunk",
+        to_key="id",
+        to_value="chunk-1",
+    )
+
+    queries = [normalize_query(query) for query, _parameters in session.calls]
+    assert all("MERGE" in query for query in queries)
+    assert all("CREATE " not in query for query in queries)
+
+
 def test_link_entity_to_chunk_uses_evidence_relationship() -> None:
     session = RecordingSession()
     repository = ClinicalGraphRepository(session)
