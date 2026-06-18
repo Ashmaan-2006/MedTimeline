@@ -110,6 +110,7 @@ def reprocess_patient_document(
 
     document_chunks.delete_for_document(document_id)
     timeline_events.delete_for_document(document_id)
+    graph_sync.delete_document_subgraph(str(document_id))
 
     queued_task = process_document_task.delay(str(document.id))
     queued_document = documents.update_processing(

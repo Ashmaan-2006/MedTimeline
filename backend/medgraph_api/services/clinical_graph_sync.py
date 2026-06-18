@@ -68,6 +68,9 @@ class ClinicalGraphSyncService:
             to_value=document_id,
         )
 
+    def delete_document_subgraph(self, document_id: str) -> None:
+        self.graph.delete_document_subgraph(document_id)
+
     def sync_chunk(self, chunk: DocumentChunk) -> None:
         document_id = str(chunk.document_id)
         chunk_id = str(chunk.id)

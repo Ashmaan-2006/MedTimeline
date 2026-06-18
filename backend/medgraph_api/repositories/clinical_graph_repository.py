@@ -158,6 +158,21 @@ class ClinicalGraphRepository:
             properties=properties,
         )
 
+    def delete_document_subgraph(self, document_id: str) -> None:
+        query = """
+        MATCH (document:Document {id: $document_id})
+        OPTIONAL MATCH (document)-[:DOCUMENT_HAS_CHUNK]->(chunk:Chunk)
+        WITH document, collect(chunk) AS chunks
+        WITH document, chunks, [chunk IN chunks WHERE chunk IS NOT NULL | chunk.id] AS chunk_ids
+        OPTIONAL MATCH ()-[semantic_relationship]-()
+        WHERE semantic_relationship.source_chunk_id IN chunk_ids
+        DELETE semantic_relationship
+        WITH document, chunks
+        FOREACH (chunk IN chunks | DETACH DELETE chunk)
+        DETACH DELETE document
+        """
+        self.session.run(query, document_id=document_id)
+
     def _upsert_node(
         self,
         label: str,

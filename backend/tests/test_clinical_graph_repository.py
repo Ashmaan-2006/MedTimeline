@@ -143,6 +143,23 @@ def test_repository_allows_controlled_extracted_relationship_types() -> None:
     assert "MERGE (source)-[relationship:WORSENED_AFTER]->(target)" in normalize_query(query)
 
 
+def test_delete_document_subgraph_deletes_document_chunks_and_chunk_scoped_relationships() -> None:
+    session = RecordingSession()
+    repository = ClinicalGraphRepository(session)
+
+    repository.delete_document_subgraph("document-1")
+
+    query, parameters = session.calls[0]
+    normalized_query = normalize_query(query)
+    assert "MATCH (document:Document {id: $document_id})" in normalized_query
+    assert "OPTIONAL MATCH (document)-[:DOCUMENT_HAS_CHUNK]->(chunk:Chunk)" in normalized_query
+    assert "WHERE semantic_relationship.source_chunk_id IN chunk_ids" in normalized_query
+    assert "DETACH DELETE chunk" in normalized_query
+    assert "DETACH DELETE document" in normalized_query
+    assert "Patient" not in normalized_query
+    assert parameters == {"document_id": "document-1"}
+
+
 def test_link_event_to_patient_uses_patient_event_relationship() -> None:
     session = RecordingSession()
     repository = ClinicalGraphRepository(session)

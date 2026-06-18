@@ -127,12 +127,16 @@ class FakeClinicalGraphSyncService:
     def __init__(self) -> None:
         self.patients: list[FakePatient] = []
         self.documents: list[FakeDocument] = []
+        self.deleted_document_ids: list[str] = []
 
     def sync_patient(self, patient: FakePatient) -> None:
         self.patients.append(patient)
 
     def sync_document(self, document: FakeDocument) -> None:
         self.documents.append(document)
+
+    def delete_document_subgraph(self, document_id: str) -> None:
+        self.deleted_document_ids.append(document_id)
 
 
 @pytest.fixture
@@ -397,6 +401,7 @@ def test_reprocess_patient_document_queues_new_task_and_clears_old_outputs(
     document_repository: FakeDocumentRepository,
     document_chunk_repository: FakeDocumentChunkRepository,
     timeline_event_repository: FakeTimelineEventRepository,
+    graph_sync_service: FakeClinicalGraphSyncService,
     process_document_task: FakeProcessDocumentTask,
 ) -> None:
     now = datetime.now(UTC)
@@ -434,6 +439,8 @@ def test_reprocess_patient_document_queues_new_task_and_clears_old_outputs(
     assert body["processing_attempts"] == 2
     assert document_chunk_repository.deleted_document_ids == [document.id]
     assert timeline_event_repository.deleted_document_ids == [document.id]
+    assert graph_sync_service.deleted_document_ids == [str(document.id)]
+    assert graph_sync_service.documents == [document]
     assert process_document_task.document_ids == [str(document.id)]
 
 
@@ -444,6 +451,7 @@ def test_reprocess_patient_document_rejects_active_documents(
     document_repository: FakeDocumentRepository,
     document_chunk_repository: FakeDocumentChunkRepository,
     timeline_event_repository: FakeTimelineEventRepository,
+    graph_sync_service: FakeClinicalGraphSyncService,
     process_document_task: FakeProcessDocumentTask,
     processing_status: str,
 ) -> None:
@@ -472,6 +480,7 @@ def test_reprocess_patient_document_rejects_active_documents(
     assert response.status_code == 409
     assert document_chunk_repository.deleted_document_ids == []
     assert timeline_event_repository.deleted_document_ids == []
+    assert graph_sync_service.deleted_document_ids == []
     assert process_document_task.document_ids == []
 
 

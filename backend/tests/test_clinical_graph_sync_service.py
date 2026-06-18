@@ -20,6 +20,7 @@ class RecordingGraphRepository:
         self.chunks: list[tuple[str, dict]] = []
         self.entities: list[tuple[str, str, str, dict]] = []
         self.relationships: list[dict] = []
+        self.deleted_document_ids: list[str] = []
 
     def upsert_patient_node(self, patient_id: str, properties: dict) -> None:
         self.patients.append((patient_id, properties))
@@ -41,6 +42,9 @@ class RecordingGraphRepository:
 
     def create_relationship(self, **kwargs) -> None:
         self.relationships.append(kwargs)
+
+    def delete_document_subgraph(self, document_id: str) -> None:
+        self.deleted_document_ids.append(document_id)
 
 
 def test_sync_patient_upserts_patient_node_with_postgres_identity() -> None:
@@ -151,6 +155,14 @@ def test_sync_chunk_upserts_chunk_node_and_document_relationship() -> None:
             "to_value": str(chunk_id),
         }
     ]
+
+
+def test_delete_document_subgraph_delegates_to_repository() -> None:
+    graph = RecordingGraphRepository()
+
+    ClinicalGraphSyncService(graph).delete_document_subgraph("document-1")
+
+    assert graph.deleted_document_ids == ["document-1"]
 
 
 def test_sync_entities_for_chunk_upserts_entities_and_links_to_chunk() -> None:
