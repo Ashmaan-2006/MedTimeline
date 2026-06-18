@@ -1,18 +1,22 @@
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from medgraph_api.api.routes import documents
 from medgraph_api.api.routes import patients
 from medgraph_api.api.routes import rag
+from medgraph_api.core.neo4j import close_neo4j_driver
 from medgraph_api.db.init import initialize_database
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     initialize_database()
-    yield
+    try:
+        yield
+    finally:
+        close_neo4j_driver()
 
 
 app = FastAPI(
