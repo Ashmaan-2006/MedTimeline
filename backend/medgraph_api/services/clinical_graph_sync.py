@@ -5,6 +5,17 @@ from medgraph_api.models.document import Document
 from medgraph_api.models.document_chunk import DocumentChunk
 from medgraph_api.models.patient import Patient
 from medgraph_api.repositories.clinical_graph_repository import ClinicalGraphRepository
+from medgraph_api.schemas.clinical_entity import ClinicalEntityType, ExtractedClinicalEntities
+from medgraph_api.schemas.clinical_relationship import ExtractedClinicalRelationships
+
+ENTITY_LABEL_BY_TYPE = {
+    ClinicalEntityType.SYMPTOM: "Symptom",
+    ClinicalEntityType.MEDICATION: "Medication",
+    ClinicalEntityType.DIAGNOSIS: "Diagnosis",
+    ClinicalEntityType.LAB_TEST: "LabTest",
+    ClinicalEntityType.PROCEDURE: "Procedure",
+    ClinicalEntityType.FINDING: "ECGFinding",
+}
 
 
 class ClinicalGraphSyncService:
@@ -91,6 +102,81 @@ class ClinicalGraphSyncService:
     def sync_chunks(self, chunks: list[DocumentChunk]) -> None:
         for chunk in chunks:
             self.sync_chunk(chunk)
+
+    def sync_entities_for_chunk(
+        self,
+        chunk: DocumentChunk,
+        entities: ExtractedClinicalEntities,
+    ) -> None:
+        chunk_id = str(chunk.id)
+        for entity in entities.entities:
+            entity_label = ENTITY_LABEL_BY_TYPE[entity.entity_type]
+            entity_key = "normalized_name"
+            entity_value = entity.normalized_name
+            relationship_properties = {
+                "source_chunk_id": str(entity.source_chunk_id),
+                "confidence": entity.confidence,
+                "evidence": entity.evidence_quote,
+                "date": self._serialize_value(entity.date),
+            }
+            self.graph.upsert_entity_node(
+                label=entity_label,
+                key=entity_key,
+                value=entity_value,
+                properties={
+                    "normalized_name": entity.normalized_name,
+                    "name": entity.name,
+                    "entity_type": entity.entity_type.value,
+                    "patient_id": str(chunk.patient_id),
+                    "source_chunk_id": chunk_id,
+                    "source_table": "document_chunks",
+                    "last_evidence_quote": entity.evidence_quote,
+                    "last_confidence": entity.confidence,
+                    "last_seen_at": self._serialize_value(chunk.created_at),
+                    "date": self._serialize_value(entity.date),
+                },
+            )
+            self.graph.link_chunk_to_entity(
+                chunk_id=chunk_id,
+                entity_label=entity_label,
+                entity_key=entity_key,
+                entity_value=entity_value,
+                properties=relationship_properties,
+            )
+            self.graph.link_entity_to_chunk(
+                entity_label=entity_label,
+                entity_key=entity_key,
+                entity_value=entity_value,
+                chunk_id=chunk_id,
+                properties=relationship_properties,
+            )
+
+    def sync_relationships(
+        self,
+        entities: ExtractedClinicalEntities,
+        relationships: ExtractedClinicalRelationships,
+    ) -> None:
+        entity_labels = {
+            entity.normalized_name: ENTITY_LABEL_BY_TYPE[entity.entity_type]
+            for entity in entities.entities
+        }
+        for relationship in relationships.relationships:
+            source_label = entity_labels[relationship.source]
+            target_label = entity_labels[relationship.target]
+            self.graph.create_relationship(
+                from_label=source_label,
+                from_key="normalized_name",
+                from_value=relationship.source,
+                relationship_type=relationship.type.value,
+                to_label=target_label,
+                to_key="normalized_name",
+                to_value=relationship.target,
+                properties={
+                    "source_chunk_id": str(relationship.source_chunk_id),
+                    "evidence": relationship.evidence,
+                    "confidence": relationship.confidence,
+                },
+            )
 
     def _serialize_value(self, value: Any) -> Any:
         if isinstance(value, datetime | date):

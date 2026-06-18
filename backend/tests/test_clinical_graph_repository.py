@@ -105,6 +105,44 @@ def test_link_entity_to_chunk_uses_evidence_relationship() -> None:
     assert parameters["properties"] == {"confidence": 0.81}
 
 
+def test_link_chunk_to_entity_uses_mentions_relationship() -> None:
+    session = RecordingSession()
+    repository = ClinicalGraphRepository(session)
+
+    repository.link_chunk_to_entity(
+        chunk_id="chunk-1",
+        entity_label="Symptom",
+        entity_key="normalized_name",
+        entity_value="chest pain",
+        properties={"confidence": 0.76},
+    )
+
+    query, parameters = session.calls[0]
+    normalized_query = normalize_query(query)
+    assert "MATCH (source:Chunk {id: $from_value})" in normalized_query
+    assert "MATCH (target:Symptom {normalized_name: $to_value})" in normalized_query
+    assert "MERGE (source)-[relationship:CHUNK_MENTIONS_ENTITY]->(target)" in normalized_query
+    assert parameters["properties"] == {"confidence": 0.76}
+
+
+def test_repository_allows_controlled_extracted_relationship_types() -> None:
+    session = RecordingSession()
+    repository = ClinicalGraphRepository(session)
+
+    repository.create_relationship(
+        from_label="Medication",
+        from_key="normalized_name",
+        from_value="metoprolol",
+        relationship_type="WORSENED_AFTER",
+        to_label="Symptom",
+        to_key="normalized_name",
+        to_value="shortness of breath",
+    )
+
+    query, _parameters = session.calls[0]
+    assert "MERGE (source)-[relationship:WORSENED_AFTER]->(target)" in normalize_query(query)
+
+
 def test_link_event_to_patient_uses_patient_event_relationship() -> None:
     session = RecordingSession()
     repository = ClinicalGraphRepository(session)

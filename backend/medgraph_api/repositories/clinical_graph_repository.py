@@ -16,19 +16,31 @@ ENTITY_LABELS = {
 }
 
 RELATIONSHIP_TYPES = {
+    "ASSOCIATED_WITH",
+    "CONTRAINDICATES",
     "PATIENT_HAS_DOCUMENT",
     "DOCUMENT_HAS_CHUNK",
     "CHUNK_MENTIONS_ENTITY",
+    "EVIDENCED_BY",
     "PATIENT_HAS_EVENT",
     "EVENT_MENTIONS_SYMPTOM",
     "EVENT_MENTIONS_MEDICATION",
     "EVENT_HAS_LAB_RESULT",
     "EVENT_ASSOCIATED_WITH_DIAGNOSIS",
+    "IMPROVED_AFTER",
+    "MENTIONED_IN",
     "MEDICATION_STARTED_AT_EVENT",
     "MEDICATION_STOPPED_AT_EVENT",
+    "OCCURRED_AFTER",
+    "OCCURRED_BEFORE",
+    "ORDERED_BECAUSE_OF",
+    "STARTED_AT",
+    "STOPPED_AT",
+    "SUPPORTS",
     "SYMPTOM_WORSENED_AFTER",
     "FINDING_SUPPORTS_DIAGNOSIS",
     "ENTITY_EVIDENCED_BY_CHUNK",
+    "WORSENED_AFTER",
 }
 
 NODE_LABELS = ENTITY_LABELS | {"Patient", "Document", "Chunk", "ClinicalEvent"}
@@ -107,6 +119,25 @@ class ClinicalGraphRepository:
             to_label="Chunk",
             to_key="id",
             to_value=chunk_id,
+            properties=properties,
+        )
+
+    def link_chunk_to_entity(
+        self,
+        chunk_id: str,
+        entity_label: str,
+        entity_key: str,
+        entity_value: str,
+        properties: Mapping[str, Any] | None = None,
+    ) -> None:
+        self.create_relationship(
+            from_label="Chunk",
+            from_key="id",
+            from_value=chunk_id,
+            relationship_type="CHUNK_MENTIONS_ENTITY",
+            to_label=entity_label,
+            to_key=entity_key,
+            to_value=entity_value,
             properties=properties,
         )
 

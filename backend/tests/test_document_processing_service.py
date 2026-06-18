@@ -6,6 +6,14 @@ import pytest
 
 from medgraph_api.schemas.document import DocumentProcessingUpdate
 from medgraph_api.schemas.document_chunk import DocumentChunkCreate
+from medgraph_api.schemas.clinical_entity import (
+    ExtractedClinicalEntities,
+    ExtractedClinicalEntity,
+)
+from medgraph_api.schemas.clinical_relationship import (
+    ExtractedClinicalRelationship,
+    ExtractedClinicalRelationships,
+)
 from medgraph_api.schemas.timeline_event import TimelineEventCreate
 from medgraph_api.services.chunking import TextChunk
 from medgraph_api.services.document_processing import DocumentProcessingService
@@ -62,6 +70,45 @@ class FakeDocumentChunkRepository:
         self.document_id = document_id
         self.chunks = payloads
         return payloads
+
+
+@dataclass
+class FakeStoredChunk:
+    id: UUID
+    patient_id: UUID
+    document_id: UUID
+    chunk_index: int
+    content: str
+    embedding_model: str | None
+    token_count: int | None
+    chunk_metadata: dict | None
+    created_at: datetime
+
+
+class FakeStoredDocumentChunkRepository:
+    def __init__(self) -> None:
+        self.chunks: list[FakeStoredChunk] = []
+
+    def replace_for_document(
+        self,
+        document_id: UUID,
+        payloads: list[DocumentChunkCreate],
+    ) -> list[FakeStoredChunk]:
+        self.chunks = [
+            FakeStoredChunk(
+                id=uuid4(),
+                patient_id=payload.patient_id,
+                document_id=document_id,
+                chunk_index=payload.chunk_index,
+                content=payload.content,
+                embedding_model=payload.embedding_model,
+                token_count=payload.token_count,
+                chunk_metadata=payload.chunk_metadata,
+                created_at=datetime.now(UTC),
+            )
+            for payload in payloads
+        ]
+        return self.chunks
 
 
 class FakeTimelineEventRepository:
@@ -146,6 +193,81 @@ class FakeTimelineExtractionService:
         ]
 
 
+class FakeEntityExtractionService:
+    def __init__(self) -> None:
+        self.chunk_ids: list[UUID] = []
+
+    def extract_entities(self, source_chunk_id: UUID, chunk_text: str) -> ExtractedClinicalEntities:
+        self.chunk_ids.append(source_chunk_id)
+        return ExtractedClinicalEntities(
+            entities=[
+                ExtractedClinicalEntity(
+                    entity_type="symptom",
+                    name="chest discomfort",
+                    normalized_name="chest discomfort",
+                    source_chunk_id=source_chunk_id,
+                    confidence=0.81,
+                    evidence_quote=chunk_text,
+                )
+            ]
+        )
+
+
+class FakeRelationshipExtractionService:
+    def __init__(self) -> None:
+        self.chunk_ids: list[UUID] = []
+
+    def extract_relationships(
+        self,
+        source_chunk_id: UUID,
+        chunk_text: str,
+        entities: ExtractedClinicalEntities,
+    ) -> ExtractedClinicalRelationships:
+        self.chunk_ids.append(source_chunk_id)
+        return ExtractedClinicalRelationships(
+            relationships=[
+                ExtractedClinicalRelationship(
+                    source="chest discomfort",
+                    target="chest discomfort",
+                    type="ASSOCIATED_WITH",
+                    source_chunk_id=source_chunk_id,
+                    evidence=chunk_text,
+                    confidence=0.61,
+                )
+            ]
+        )
+
+
+class FakeGraphSyncService:
+    def __init__(self) -> None:
+        self.documents: list[FakeDocument] = []
+        self.chunks: list[list[FakeStoredChunk]] = []
+        self.entity_calls: list[tuple[FakeStoredChunk, ExtractedClinicalEntities]] = []
+        self.relationship_calls: list[
+            tuple[ExtractedClinicalEntities, ExtractedClinicalRelationships]
+        ] = []
+
+    def sync_document(self, document: FakeDocument) -> None:
+        self.documents.append(document)
+
+    def sync_chunks(self, chunks: list[FakeStoredChunk]) -> None:
+        self.chunks.append(chunks)
+
+    def sync_entities_for_chunk(
+        self,
+        chunk: FakeStoredChunk,
+        entities: ExtractedClinicalEntities,
+    ) -> None:
+        self.entity_calls.append((chunk, entities))
+
+    def sync_relationships(
+        self,
+        entities: ExtractedClinicalEntities,
+        relationships: ExtractedClinicalRelationships,
+    ) -> None:
+        self.relationship_calls.append((entities, relationships))
+
+
 @pytest.fixture
 def document() -> FakeDocument:
     now = datetime.now(UTC)
@@ -206,6 +328,37 @@ def test_document_processing_service_runs_full_pipeline(document: FakeDocument) 
         "processing",
         "completed",
     ]
+
+
+def test_document_processing_service_builds_clinical_graph(document: FakeDocument) -> None:
+    documents = FakeDocumentRepository()
+    document_chunks = FakeStoredDocumentChunkRepository()
+    timeline_events = FakeTimelineEventRepository()
+    graph_sync_service = FakeGraphSyncService()
+    entity_extraction_service = FakeEntityExtractionService()
+    relationship_extraction_service = FakeRelationshipExtractionService()
+    service = DocumentProcessingService(
+        documents=documents,
+        document_chunks=document_chunks,
+        timeline_events=timeline_events,
+        extraction_service=FakeExtractionService(),
+        chunking_service=FakeChunkingService(),
+        embedding_service=FakeEmbeddingService(),
+        summary_service=FakeSummaryService(),
+        timeline_extraction_service=FakeTimelineExtractionService(),
+        graph_sync_service=graph_sync_service,
+        entity_extraction_service=entity_extraction_service,
+        relationship_extraction_service=relationship_extraction_service,
+    )
+
+    service.process(document)
+
+    stored_chunk = document_chunks.chunks[0]
+    assert graph_sync_service.chunks == [[stored_chunk]]
+    assert entity_extraction_service.chunk_ids == [stored_chunk.id]
+    assert relationship_extraction_service.chunk_ids == [stored_chunk.id]
+    assert graph_sync_service.entity_calls[0][0] == stored_chunk
+    assert graph_sync_service.relationship_calls[0][1].relationships[0].type == "ASSOCIATED_WITH"
 
 
 def test_document_processing_service_marks_unsupported_documents_failed(

@@ -19,10 +19,18 @@ from medgraph_api.services.chunking import TextChunkingService
 from medgraph_api.services.clinical_graph_sync import ClinicalGraphSyncService
 from medgraph_api.services.document_processing import DocumentProcessingService
 from medgraph_api.services.embeddings import HashingEmbeddingService
+from medgraph_api.services.entity_extraction_service import ClinicalEntityExtractionService
 from medgraph_api.services.extraction import DocumentExtractionService
+from medgraph_api.services.local_clinical_llm import (
+    LocalClinicalEntityLLMClient,
+    LocalClinicalRelationshipLLMClient,
+)
 from medgraph_api.services.processing_errors import (
     PermanentDocumentProcessingError,
     TemporaryDocumentProcessingError,
+)
+from medgraph_api.services.relationship_extraction_service import (
+    ClinicalRelationshipExtractionService,
 )
 from medgraph_api.services.summarization import BasicAISummaryService
 from medgraph_api.services.timeline_extraction import BasicTimelineEventExtractionService
@@ -46,6 +54,10 @@ def build_document_processing_service(
         summary_service=BasicAISummaryService(),
         timeline_extraction_service=BasicTimelineEventExtractionService(),
         graph_sync_service=graph_sync_service,
+        entity_extraction_service=ClinicalEntityExtractionService(LocalClinicalEntityLLMClient()),
+        relationship_extraction_service=ClinicalRelationshipExtractionService(
+            LocalClinicalRelationshipLLMClient()
+        ),
     )
 
 
