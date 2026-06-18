@@ -3,20 +3,26 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from medgraph_api.api.deps import get_patient_repository, get_timeline_event_repository
+from medgraph_api.api.deps import (
+    get_clinical_graph_sync_service,
+    get_patient_repository,
+    get_timeline_event_repository,
+)
 from medgraph_api.crud.patients import PatientRepository
 from medgraph_api.crud.timeline_events import TimelineEventRepository
 from medgraph_api.schemas.patient import PatientCreate, PatientRead, PatientUpdate
 from medgraph_api.schemas.timeline_event import TimelineEventRead
+from medgraph_api.services.clinical_graph_sync import ClinicalGraphSyncService
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
 PatientRepo = Annotated[PatientRepository, Depends(get_patient_repository)]
 TimelineEventRepo = Annotated[TimelineEventRepository, Depends(get_timeline_event_repository)]
+GraphSync = Annotated[ClinicalGraphSyncService, Depends(get_clinical_graph_sync_service)]
 
 
 @router.post("", response_model=PatientRead, status_code=status.HTTP_201_CREATED)
-def create_patient(payload: PatientCreate, patients: PatientRepo) -> PatientRead:
+def create_patient(payload: PatientCreate, patients: PatientRepo, graph_sync: GraphSync) -> PatientRead:
     existing_patient = patients.get_by_medical_record_number(payload.medical_record_number)
     if existing_patient is not None:
         raise HTTPException(
@@ -24,7 +30,9 @@ def create_patient(payload: PatientCreate, patients: PatientRepo) -> PatientRead
             detail="A patient with this medical record number already exists.",
         )
 
-    return patients.create(payload)
+    patient = patients.create(payload)
+    graph_sync.sync_patient(patient)
+    return patient
 
 
 @router.get("", response_model=list[PatientRead])

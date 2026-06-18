@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from medgraph_api.api.deps import (
+    get_clinical_graph_sync_service,
     get_document_chunk_repository,
     get_document_repository,
     get_patient_repository,
@@ -122,6 +123,18 @@ class FakeTimelineEventRepository:
         self.deleted_document_ids.append(document_id)
 
 
+class FakeClinicalGraphSyncService:
+    def __init__(self) -> None:
+        self.patients: list[FakePatient] = []
+        self.documents: list[FakeDocument] = []
+
+    def sync_patient(self, patient: FakePatient) -> None:
+        self.patients.append(patient)
+
+    def sync_document(self, document: FakeDocument) -> None:
+        self.documents.append(document)
+
+
 @pytest.fixture
 def patient() -> FakePatient:
     now = datetime.now(UTC)
@@ -150,6 +163,11 @@ def timeline_event_repository() -> FakeTimelineEventRepository:
     return FakeTimelineEventRepository()
 
 
+@pytest.fixture
+def graph_sync_service() -> FakeClinicalGraphSyncService:
+    return FakeClinicalGraphSyncService()
+
+
 class FakeAsyncResult:
     id = "task-upload-123"
 
@@ -176,6 +194,7 @@ def client(
     document_repository: FakeDocumentRepository,
     document_chunk_repository: FakeDocumentChunkRepository,
     timeline_event_repository: FakeTimelineEventRepository,
+    graph_sync_service: FakeClinicalGraphSyncService,
     process_document_task: FakeProcessDocumentTask,
 ) -> Iterator[TestClient]:
     repository = FakePatientRepository(patient)
@@ -196,10 +215,14 @@ def client(
     def override_timeline_event_repository() -> Iterator[FakeTimelineEventRepository]:
         yield timeline_event_repository
 
+    def override_graph_sync_service() -> FakeClinicalGraphSyncService:
+        return graph_sync_service
+
     app.dependency_overrides[get_patient_repository] = override_patient_repository
     app.dependency_overrides[get_document_repository] = override_document_repository
     app.dependency_overrides[get_document_chunk_repository] = override_document_chunk_repository
     app.dependency_overrides[get_timeline_event_repository] = override_timeline_event_repository
+    app.dependency_overrides[get_clinical_graph_sync_service] = override_graph_sync_service
     app.dependency_overrides[get_upload_storage] = override_upload_storage
     monkeypatch.setattr(
         "medgraph_api.api.routes.documents.process_document_task",
@@ -215,6 +238,7 @@ def test_upload_patient_document(
     client: TestClient,
     patient: FakePatient,
     document_repository: FakeDocumentRepository,
+    graph_sync_service: FakeClinicalGraphSyncService,
     process_document_task: FakeProcessDocumentTask,
 ) -> None:
     response = client.post(
@@ -244,6 +268,8 @@ def test_upload_patient_document(
     assert document_repository.documents[0].celery_task_id == "task-upload-123"
     assert document_repository.documents[0].processing_attempts == 0
     assert process_document_task.document_ids == [body["id"]]
+    assert graph_sync_service.patients == [patient]
+    assert graph_sync_service.documents == [document_repository.documents[0]]
 
 
 def test_list_patient_documents(

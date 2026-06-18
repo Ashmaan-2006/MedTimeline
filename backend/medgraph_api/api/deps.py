@@ -7,8 +7,11 @@ from medgraph_api.crud.document_chunks import DocumentChunkRepository
 from medgraph_api.crud.documents import DocumentRepository
 from medgraph_api.crud.patients import PatientRepository
 from medgraph_api.crud.timeline_events import TimelineEventRepository
+from medgraph_api.core.neo4j import neo4j_session
 from medgraph_api.db.session import get_db
+from medgraph_api.repositories.clinical_graph_repository import ClinicalGraphRepository
 from medgraph_api.services.chunking import TextChunkingService
+from medgraph_api.services.clinical_graph_sync import ClinicalGraphSyncService
 from medgraph_api.services.document_processing import DocumentProcessingService
 from medgraph_api.services.embeddings import HashingEmbeddingService
 from medgraph_api.services.extraction import DocumentExtractionService
@@ -81,6 +84,11 @@ def get_timeline_event_extraction_service() -> BasicTimelineEventExtractionServi
     return BasicTimelineEventExtractionService()
 
 
+def get_clinical_graph_sync_service() -> Generator[ClinicalGraphSyncService, None, None]:
+    with neo4j_session() as session:
+        yield ClinicalGraphSyncService(ClinicalGraphRepository(session))
+
+
 def get_document_processing_service(
     documents: DocumentRepository = Depends(get_document_repository),
     document_chunks: DocumentChunkRepository = Depends(get_document_chunk_repository),
@@ -92,6 +100,7 @@ def get_document_processing_service(
     timeline_extraction_service: BasicTimelineEventExtractionService = Depends(
         get_timeline_event_extraction_service
     ),
+    graph_sync_service: ClinicalGraphSyncService = Depends(get_clinical_graph_sync_service),
 ) -> DocumentProcessingService:
     return DocumentProcessingService(
         documents=documents,
@@ -102,4 +111,5 @@ def get_document_processing_service(
         embedding_service=embedding_service,
         summary_service=summary_service,
         timeline_extraction_service=timeline_extraction_service,
+        graph_sync_service=graph_sync_service,
     )

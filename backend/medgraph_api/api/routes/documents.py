@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from medgraph_api.api.deps import (
     get_document_chunk_repository,
     get_document_repository,
+    get_clinical_graph_sync_service,
     get_patient_repository,
     get_timeline_event_repository,
     get_upload_storage,
@@ -22,6 +23,7 @@ from medgraph_api.schemas.document import (
     DocumentUploadRead,
 )
 from medgraph_api.services.storage import LocalUploadStorage
+from medgraph_api.services.clinical_graph_sync import ClinicalGraphSyncService
 from medgraph_api.tasks.document_tasks import process_document_task
 
 router = APIRouter(prefix="/patients/{patient_id}/documents", tags=["documents"])
@@ -31,6 +33,7 @@ DocumentRepo = Annotated[DocumentRepository, Depends(get_document_repository)]
 DocumentChunkRepo = Annotated[DocumentChunkRepository, Depends(get_document_chunk_repository)]
 TimelineEventRepo = Annotated[TimelineEventRepository, Depends(get_timeline_event_repository)]
 UploadStorage = Annotated[LocalUploadStorage, Depends(get_upload_storage)]
+GraphSync = Annotated[ClinicalGraphSyncService, Depends(get_clinical_graph_sync_service)]
 
 ACTIVE_PROCESSING_STATUSES = {
     DocumentProcessingStatus.QUEUED,
@@ -89,6 +92,7 @@ def reprocess_patient_document(
     documents: DocumentRepo,
     document_chunks: DocumentChunkRepo,
     timeline_events: TimelineEventRepo,
+    graph_sync: GraphSync,
 ) -> DocumentUploadRead:
     patient = patients.get(patient_id)
     if patient is None:
@@ -108,7 +112,7 @@ def reprocess_patient_document(
     timeline_events.delete_for_document(document_id)
 
     queued_task = process_document_task.delay(str(document.id))
-    return documents.update_processing(
+    queued_document = documents.update_processing(
         document,
         DocumentProcessingUpdate(
             extracted_text=None,
@@ -121,6 +125,8 @@ def reprocess_patient_document(
             processing_attempts=document.processing_attempts,
         ),
     )
+    graph_sync.sync_document(queued_document)
+    return queued_document
 
 
 @router.post("", response_model=DocumentUploadRead, status_code=status.HTTP_201_CREATED)
@@ -129,6 +135,7 @@ def upload_patient_document(
     patients: PatientRepo,
     documents: DocumentRepo,
     storage: UploadStorage,
+    graph_sync: GraphSync,
     file: UploadFile = File(...),
 ) -> DocumentUploadRead:
     patient = patients.get(patient_id)
@@ -149,7 +156,7 @@ def upload_patient_document(
     )
 
     queued_task = process_document_task.delay(str(document.id))
-    return documents.update_processing(
+    queued_document = documents.update_processing(
         document,
         DocumentProcessingUpdate(
             extracted_text=document.extracted_text,
@@ -160,3 +167,6 @@ def upload_patient_document(
             processing_attempts=document.processing_attempts,
         ),
     )
+    graph_sync.sync_patient(patient)
+    graph_sync.sync_document(queued_document)
+    return queued_document

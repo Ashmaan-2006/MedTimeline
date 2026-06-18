@@ -6,7 +6,11 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from medgraph_api.api.deps import get_patient_repository, get_timeline_event_repository
+from medgraph_api.api.deps import (
+    get_clinical_graph_sync_service,
+    get_patient_repository,
+    get_timeline_event_repository,
+)
 from medgraph_api.main import app
 from medgraph_api.schemas.patient import PatientCreate, PatientUpdate
 
@@ -95,14 +99,28 @@ class FakeTimelineEventRepository:
         return matching_events[skip : skip + limit]
 
 
+class FakeClinicalGraphSyncService:
+    def __init__(self) -> None:
+        self.patients: list[FakePatient] = []
+
+    def sync_patient(self, patient: FakePatient) -> None:
+        self.patients.append(patient)
+
+
 @pytest.fixture
 def fake_timeline_event_repository() -> FakeTimelineEventRepository:
     return FakeTimelineEventRepository()
 
 
 @pytest.fixture
+def fake_graph_sync_service() -> FakeClinicalGraphSyncService:
+    return FakeClinicalGraphSyncService()
+
+
+@pytest.fixture
 def fake_patient_repository(
     fake_timeline_event_repository: FakeTimelineEventRepository,
+    fake_graph_sync_service: FakeClinicalGraphSyncService,
 ) -> Iterator[FakePatientRepository]:
     repository = FakePatientRepository()
 
@@ -112,8 +130,12 @@ def fake_patient_repository(
     def override_timeline_event_repository() -> Iterator[FakeTimelineEventRepository]:
         yield fake_timeline_event_repository
 
+    def override_graph_sync_service() -> FakeClinicalGraphSyncService:
+        return fake_graph_sync_service
+
     app.dependency_overrides[get_patient_repository] = override_patient_repository
     app.dependency_overrides[get_timeline_event_repository] = override_timeline_event_repository
+    app.dependency_overrides[get_clinical_graph_sync_service] = override_graph_sync_service
     try:
         yield repository
     finally:
@@ -125,7 +147,10 @@ def client(fake_patient_repository: FakePatientRepository) -> TestClient:
     return TestClient(app)
 
 
-def test_create_patient(client: TestClient) -> None:
+def test_create_patient(
+    client: TestClient,
+    fake_graph_sync_service: FakeClinicalGraphSyncService,
+) -> None:
     response = client.post(
         "/patients",
         json={
@@ -143,6 +168,8 @@ def test_create_patient(client: TestClient) -> None:
     assert body["id"]
     assert body["medical_record_number"] == "MRN-001"
     assert body["first_name"] == "Maya"
+    assert len(fake_graph_sync_service.patients) == 1
+    assert str(fake_graph_sync_service.patients[0].id) == body["id"]
 
 
 def test_list_and_get_patient(client: TestClient) -> None:

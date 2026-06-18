@@ -7,6 +7,7 @@ from medgraph_api.models.document import Document
 from medgraph_api.schemas.document import DocumentProcessingStatus, DocumentProcessingUpdate
 from medgraph_api.schemas.document_chunk import DocumentChunkCreate
 from medgraph_api.services.chunking import TextChunkingService
+from medgraph_api.services.clinical_graph_sync import ClinicalGraphSyncService
 from medgraph_api.services.embeddings import HashingEmbeddingService
 from medgraph_api.services.extraction import DocumentExtractionService
 from medgraph_api.services.processing_errors import (
@@ -30,6 +31,7 @@ class DocumentProcessingService:
         embedding_service: HashingEmbeddingService,
         summary_service: BasicAISummaryService,
         timeline_extraction_service: BasicTimelineEventExtractionService,
+        graph_sync_service: ClinicalGraphSyncService | None = None,
     ) -> None:
         self.documents = documents
         self.document_chunks = document_chunks
@@ -39,6 +41,7 @@ class DocumentProcessingService:
         self.embedding_service = embedding_service
         self.summary_service = summary_service
         self.timeline_extraction_service = timeline_extraction_service
+        self.graph_sync_service = graph_sync_service
 
     def process(self, document: Document) -> Document:
         attempt_number = document.processing_attempts + 1
@@ -57,6 +60,9 @@ class DocumentProcessingService:
         )
 
         try:
+            if self.graph_sync_service is not None:
+                self.graph_sync_service.sync_document(processing_document)
+
             extracted_text = self.extraction_service.extract_text(
                 storage_path=processing_document.storage_path,
                 content_type=processing_document.content_type,
@@ -78,7 +84,7 @@ class DocumentProcessingService:
             self._store_chunks(processing_document, extracted_text)
             self._store_timeline_events(processing_document, extracted_text)
 
-            return self.documents.update_processing(
+            completed_document = self.documents.update_processing(
                 processing_document,
                 DocumentProcessingUpdate(
                     extracted_text=extracted_text,
@@ -90,6 +96,10 @@ class DocumentProcessingService:
                     processing_attempts=attempt_number,
                 ),
             )
+            if self.graph_sync_service is not None:
+                self.graph_sync_service.sync_document(completed_document)
+
+            return completed_document
         except PermanentDocumentProcessingError as exc:
             return self._mark_failed(
                 processing_document,
@@ -117,7 +127,7 @@ class DocumentProcessingService:
     def _store_chunks(self, document: Document, extracted_text: str) -> None:
         text_chunks = self.chunking_service.chunk_text(extracted_text)
         embeddings = self.embedding_service.embed_texts([chunk.content for chunk in text_chunks])
-        self.document_chunks.replace_for_document(
+        stored_chunks = self.document_chunks.replace_for_document(
             document_id=document.id,
             payloads=[
                 DocumentChunkCreate(
@@ -133,6 +143,8 @@ class DocumentProcessingService:
                 for chunk, embedding in zip(text_chunks, embeddings, strict=True)
             ],
         )
+        if self.graph_sync_service is not None:
+            self.graph_sync_service.sync_chunks(stored_chunks)
 
     def _store_timeline_events(self, document: Document, extracted_text: str) -> None:
         extracted_events = self.timeline_extraction_service.extract_events(
