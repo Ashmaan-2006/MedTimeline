@@ -15,6 +15,7 @@ from medgraph_api.services.clinical_graph_sync import ClinicalGraphSyncService
 from medgraph_api.services.document_processing import DocumentProcessingService
 from medgraph_api.services.embeddings import HashingEmbeddingService
 from medgraph_api.services.extraction import DocumentExtractionService
+from medgraph_api.services.graph_query_service import ClinicalGraphQueryService
 from medgraph_api.services.rag import PatientRagQueryService
 from medgraph_api.services.similarity_search import PatientDocumentSimilaritySearchService
 from medgraph_api.services.storage import LocalUploadStorage
@@ -87,6 +88,11 @@ def get_timeline_event_extraction_service() -> BasicTimelineEventExtractionServi
 def get_clinical_graph_sync_service() -> Generator[ClinicalGraphSyncService, None, None]:
     with neo4j_session() as session:
         yield ClinicalGraphSyncService(ClinicalGraphRepository(session))
+
+
+def get_clinical_graph_query_service() -> Generator[ClinicalGraphQueryService, None, None]:
+    with neo4j_session() as session:
+        yield ClinicalGraphQueryService(session)
 
 
 def get_document_processing_service(

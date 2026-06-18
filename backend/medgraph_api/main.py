@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from medgraph_api.api.routes import documents
+from medgraph_api.api.routes import graph
 from medgraph_api.api.routes import patients
 from medgraph_api.api.routes import rag
 from medgraph_api.core.neo4j import close_neo4j_driver
@@ -28,6 +29,7 @@ app = FastAPI(
 
 app.include_router(patients.router)
 app.include_router(documents.router)
+app.include_router(graph.router)
 app.include_router(rag.router)
 
 

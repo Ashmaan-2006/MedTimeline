@@ -102,6 +102,32 @@ def test_get_entities_for_patient_returns_ranked_entities() -> None:
     assert parameters == {"patient_id": "patient-1"}
 
 
+def test_get_relationships_for_patient_returns_entity_relationships() -> None:
+    session = RecordingSession(
+        [
+            {
+                "source_label": "Medication",
+                "source_name": "metoprolol",
+                "relationship_type": "WORSENED_AFTER",
+                "target_label": "Symptom",
+                "target_name": "shortness of breath",
+                "evidence": "shortness of breath after metoprolol",
+                "confidence": 0.72,
+                "source_chunk_id": "chunk-1",
+            }
+        ]
+    )
+
+    relationships = ClinicalGraphQueryService(session).get_relationships_for_patient("patient-1")
+
+    assert relationships[0].source_name == "metoprolol"
+    assert relationships[0].relationship_type == "WORSENED_AFTER"
+    assert relationships[0].target_name == "shortness of breath"
+    query, parameters = session.calls[0]
+    assert "type(relationship) <> \"ENTITY_EVIDENCED_BY_CHUNK\"" in query
+    assert parameters == {"patient_id": "patient-1"}
+
+
 def test_get_events_related_to_medication_normalizes_medication_name() -> None:
     session = RecordingSession(
         [

@@ -24,6 +24,18 @@ class GraphEntity:
 
 
 @dataclass(frozen=True)
+class GraphRelationship:
+    source_label: str
+    source_name: str
+    relationship_type: str
+    target_label: str
+    target_name: str
+    evidence: str | None
+    confidence: float | None
+    source_chunk_id: str | None
+
+
+@dataclass(frozen=True)
 class MedicationRelatedEvent:
     event_id: str
     event_type: str | None
@@ -119,6 +131,38 @@ class ClinicalGraphQueryService:
                 mention_count=record["mention_count"],
                 evidence_count=record["evidence_count"],
                 latest_seen_at=record.get("latest_seen_at"),
+            )
+            for record in self._records(query, patient_id=patient_id)
+        ]
+
+    def get_relationships_for_patient(self, patient_id: str) -> list[GraphRelationship]:
+        query = """
+        MATCH (:Patient {id: $patient_id})-[:PATIENT_HAS_DOCUMENT]->(:Document)
+          -[:DOCUMENT_HAS_CHUNK]->(:Chunk)-[:CHUNK_MENTIONS_ENTITY]->(source)
+        MATCH (source)-[relationship]->(target)
+        WHERE target.normalized_name IS NOT NULL
+          AND type(relationship) <> "ENTITY_EVIDENCED_BY_CHUNK"
+        RETURN DISTINCT
+          labels(source)[0] AS source_label,
+          coalesce(source.normalized_name, source.name) AS source_name,
+          type(relationship) AS relationship_type,
+          labels(target)[0] AS target_label,
+          coalesce(target.normalized_name, target.name) AS target_name,
+          relationship.evidence AS evidence,
+          relationship.confidence AS confidence,
+          relationship.source_chunk_id AS source_chunk_id
+        ORDER BY source_name ASC, relationship_type ASC, target_name ASC
+        """
+        return [
+            GraphRelationship(
+                source_label=record["source_label"],
+                source_name=record["source_name"],
+                relationship_type=record["relationship_type"],
+                target_label=record["target_label"],
+                target_name=record["target_name"],
+                evidence=record.get("evidence"),
+                confidence=record.get("confidence"),
+                source_chunk_id=record.get("source_chunk_id"),
             )
             for record in self._records(query, patient_id=patient_id)
         ]
