@@ -11,6 +11,7 @@ from medgraph_api.services.chunking import TextChunk
 from medgraph_api.services.document_processing import DocumentProcessingService
 from medgraph_api.services.embeddings import TextEmbedding
 from medgraph_api.services.extraction import UnsupportedDocumentTypeError
+from medgraph_api.services.processing_errors import TemporaryDocumentProcessingError
 
 
 @dataclass
@@ -92,6 +93,11 @@ class FailingExtractionService:
 class FakeSummaryService:
     def summarize(self, text: str) -> str:
         return f"Summary: {text}"
+
+
+class FailingSummaryService:
+    def summarize(self, text: str) -> str:
+        raise RuntimeError("provider stack trace with secret token")
 
 
 class FakeChunkingService:
@@ -232,3 +238,32 @@ def test_document_processing_service_marks_unsupported_documents_failed(
         "processing",
         "failed",
     ]
+
+
+def test_document_processing_service_stores_safe_message_for_temporary_failures(
+    document: FakeDocument,
+) -> None:
+    documents = FakeDocumentRepository()
+    document_chunks = FakeDocumentChunkRepository()
+    timeline_events = FakeTimelineEventRepository()
+    service = DocumentProcessingService(
+        documents=documents,
+        document_chunks=document_chunks,
+        timeline_events=timeline_events,
+        extraction_service=FakeExtractionService(),
+        chunking_service=FakeChunkingService(),
+        embedding_service=FakeEmbeddingService(),
+        summary_service=FailingSummaryService(),
+        timeline_extraction_service=FakeTimelineExtractionService(),
+    )
+
+    with pytest.raises(TemporaryDocumentProcessingError):
+        service.process(document)
+
+    assert document.processing_status == "processing"
+    assert document.processing_error == "Temporary processing issue. Retrying automatically."
+    assert "secret token" not in document.processing_error
+    assert document.processing_completed_at is None
+    assert document.processing_attempts == 1
+    assert document_chunks.chunks == []
+    assert timeline_events.events == []

@@ -5,7 +5,9 @@ from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from medgraph_api.services.extraction import (
+    CorruptedDocumentError,
     DocumentExtractionService,
+    MissingDocumentFileError,
     UnsupportedDocumentTypeError,
 )
 
@@ -60,3 +62,26 @@ def test_extract_rejects_unsupported_document_type(tmp_path: Path) -> None:
             storage_path=str(path),
             content_type="image/png",
         )
+
+
+def test_extract_reports_missing_files_safely(tmp_path: Path) -> None:
+    with pytest.raises(MissingDocumentFileError) as exc_info:
+        DocumentExtractionService().extract_text(
+            storage_path=str(tmp_path / "missing.pdf"),
+            content_type="application/pdf",
+        )
+
+    assert exc_info.value.safe_message == "Uploaded document file could not be found."
+
+
+def test_extract_reports_corrupted_text_safely(tmp_path: Path) -> None:
+    path = tmp_path / "bad.txt"
+    path.write_bytes(b"\xff\xfe\x00")
+
+    with pytest.raises(CorruptedDocumentError) as exc_info:
+        DocumentExtractionService().extract_text(
+            storage_path=str(path),
+            content_type="text/plain",
+        )
+
+    assert exc_info.value.safe_message == "Document could not be read. Upload a valid PDF or text file."

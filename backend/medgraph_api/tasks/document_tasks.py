@@ -1,7 +1,9 @@
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 from celery import Task
+from sqlalchemy.exc import DisconnectionError, OperationalError
 from sqlalchemy.orm import Session
 
 from medgraph_api.core.celery_app import celery_app
@@ -14,8 +16,16 @@ from medgraph_api.services.chunking import TextChunkingService
 from medgraph_api.services.document_processing import DocumentProcessingService
 from medgraph_api.services.embeddings import HashingEmbeddingService
 from medgraph_api.services.extraction import DocumentExtractionService
+from medgraph_api.services.processing_errors import (
+    PermanentDocumentProcessingError,
+    TemporaryDocumentProcessingError,
+)
 from medgraph_api.services.summarization import BasicAISummaryService
 from medgraph_api.services.timeline_extraction import BasicTimelineEventExtractionService
+
+FINAL_TEMPORARY_FAILURE_MESSAGE = (
+    "Document processing is temporarily unavailable. Try uploading the document again."
+)
 
 
 def build_document_processing_service(db: Session) -> DocumentProcessingService:
@@ -31,6 +41,18 @@ def build_document_processing_service(db: Session) -> DocumentProcessingService:
     )
 
 
+def is_retryable_processing_exception(exc: Exception) -> bool:
+    return isinstance(
+        exc,
+        (
+            TemporaryDocumentProcessingError,
+            OperationalError,
+            DisconnectionError,
+            TimeoutError,
+        ),
+    )
+
+
 @celery_app.task(bind=True, max_retries=3)
 def process_document_task(self: Task, document_id: str) -> dict[str, Any]:
     try:
@@ -42,43 +64,101 @@ def process_document_task(self: Task, document_id: str) -> dict[str, Any]:
             "error": "Invalid document ID.",
         }
 
-    with SessionLocal() as db:
-        documents = DocumentRepository(db)
-        document = documents.get(parsed_document_id)
-        if document is None:
-            return {
-                "document_id": document_id,
-                "status": DocumentProcessingStatus.FAILED,
-                "error": "Document not found.",
-            }
-
-        if self.request.id is not None:
-            document = documents.update_processing(
-                document,
-                DocumentProcessingUpdate(
-                    extracted_text=document.extracted_text,
-                    summary=document.summary,
-                    processing_status=DocumentProcessingStatus.QUEUED,
-                    processing_error=None,
-                    celery_task_id=self.request.id,
-                    processing_attempts=document.processing_attempts,
-                ),
-            )
-
-        try:
-            processed_document = build_document_processing_service(db).process(document)
-        except Exception as exc:
-            if self.request.retries >= self.max_retries:
+    try:
+        with SessionLocal() as db:
+            documents = DocumentRepository(db)
+            document = documents.get(parsed_document_id)
+            if document is None:
                 return {
                     "document_id": document_id,
                     "status": DocumentProcessingStatus.FAILED,
-                    "error": str(exc),
+                    "error": "Document not found.",
                 }
 
-            countdown = min(60, 2 ** self.request.retries)
-            raise self.retry(exc=exc, countdown=countdown) from exc
+            if self.request.id is not None:
+                document = documents.update_processing(
+                    document,
+                    DocumentProcessingUpdate(
+                        extracted_text=document.extracted_text,
+                        summary=document.summary,
+                        processing_status=DocumentProcessingStatus.QUEUED,
+                        processing_error=None,
+                        celery_task_id=self.request.id,
+                        processing_attempts=document.processing_attempts,
+                    ),
+                )
 
-    return {
-        "document_id": str(processed_document.id),
-        "status": processed_document.processing_status,
-    }
+            try:
+                processed_document = build_document_processing_service(db).process(document)
+            except PermanentDocumentProcessingError as exc:
+                processed_document = documents.update_processing(
+                    document,
+                    DocumentProcessingUpdate(
+                        extracted_text=document.extracted_text,
+                        summary=document.summary,
+                        processing_status=DocumentProcessingStatus.FAILED,
+                        processing_error=exc.safe_message,
+                        processing_started_at=document.processing_started_at,
+                        processing_completed_at=datetime.now(UTC),
+                        processing_attempts=document.processing_attempts,
+                    ),
+                )
+            except Exception as exc:
+                if not is_retryable_processing_exception(exc):
+                    processed_document = documents.update_processing(
+                        document,
+                        DocumentProcessingUpdate(
+                            extracted_text=document.extracted_text,
+                            summary=document.summary,
+                            processing_status=DocumentProcessingStatus.FAILED,
+                            processing_error="Document processing failed.",
+                            processing_started_at=document.processing_started_at,
+                            processing_completed_at=datetime.now(UTC),
+                            processing_attempts=document.processing_attempts,
+                        ),
+                    )
+                    return {
+                        "document_id": str(processed_document.id),
+                        "status": processed_document.processing_status,
+                        "error": processed_document.processing_error,
+                    }
+
+                if self.request.retries >= self.max_retries:
+                    processed_document = documents.update_processing(
+                        document,
+                        DocumentProcessingUpdate(
+                            extracted_text=document.extracted_text,
+                            summary=document.summary,
+                            processing_status=DocumentProcessingStatus.FAILED,
+                            processing_error=FINAL_TEMPORARY_FAILURE_MESSAGE,
+                            processing_started_at=document.processing_started_at,
+                            processing_completed_at=datetime.now(UTC),
+                            processing_attempts=document.processing_attempts,
+                        ),
+                    )
+                    return {
+                        "document_id": str(processed_document.id),
+                        "status": processed_document.processing_status,
+                        "error": processed_document.processing_error,
+                    }
+
+                countdown = min(60, 2 ** self.request.retries)
+                raise self.retry(exc=exc, countdown=countdown) from exc
+
+        return {
+            "document_id": str(processed_document.id),
+            "status": processed_document.processing_status,
+        }
+    except Exception as exc:
+        if not is_retryable_processing_exception(exc):
+            raise
+
+        if self.request.retries >= self.max_retries:
+            return {
+                "document_id": document_id,
+                "status": DocumentProcessingStatus.FAILED,
+                "error": FINAL_TEMPORARY_FAILURE_MESSAGE,
+            }
+
+        countdown = min(60, 2 ** self.request.retries)
+        raise self.retry(exc=exc, countdown=countdown) from exc

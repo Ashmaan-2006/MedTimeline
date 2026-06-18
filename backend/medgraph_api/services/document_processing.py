@@ -8,9 +8,15 @@ from medgraph_api.schemas.document import DocumentProcessingStatus, DocumentProc
 from medgraph_api.schemas.document_chunk import DocumentChunkCreate
 from medgraph_api.services.chunking import TextChunkingService
 from medgraph_api.services.embeddings import HashingEmbeddingService
-from medgraph_api.services.extraction import DocumentExtractionService, UnsupportedDocumentTypeError
+from medgraph_api.services.extraction import DocumentExtractionService
+from medgraph_api.services.processing_errors import (
+    PermanentDocumentProcessingError,
+    TemporaryDocumentProcessingError,
+)
 from medgraph_api.services.summarization import BasicAISummaryService
 from medgraph_api.services.timeline_extraction import BasicTimelineEventExtractionService
+
+RETRYABLE_PROCESSING_ERROR_MESSAGE = "Temporary processing issue. Retrying automatically."
 
 
 class DocumentProcessingService:
@@ -84,21 +90,29 @@ class DocumentProcessingService:
                     processing_attempts=attempt_number,
                 ),
             )
-        except UnsupportedDocumentTypeError:
+        except PermanentDocumentProcessingError as exc:
             return self._mark_failed(
                 processing_document,
                 attempt_number=attempt_number,
-                error="Unsupported document type.",
+                error=exc.safe_message,
                 processing_started_at=processing_started_at,
             )
-        except Exception as exc:
-            self._mark_failed(
+        except TemporaryDocumentProcessingError as exc:
+            self._mark_processing_retryable_error(
                 processing_document,
                 attempt_number=attempt_number,
-                error=str(exc),
+                error=exc.safe_message,
                 processing_started_at=processing_started_at,
             )
             raise
+        except Exception as exc:
+            self._mark_processing_retryable_error(
+                processing_document,
+                attempt_number=attempt_number,
+                error=RETRYABLE_PROCESSING_ERROR_MESSAGE,
+                processing_started_at=processing_started_at,
+            )
+            raise TemporaryDocumentProcessingError(RETRYABLE_PROCESSING_ERROR_MESSAGE) from exc
 
     def _store_chunks(self, document: Document, extracted_text: str) -> None:
         text_chunks = self.chunking_service.chunk_text(extracted_text)
@@ -144,6 +158,26 @@ class DocumentProcessingService:
                 processing_error=error,
                 processing_started_at=processing_started_at,
                 processing_completed_at=datetime.now(UTC),
+                processing_attempts=attempt_number,
+            ),
+        )
+
+    def _mark_processing_retryable_error(
+        self,
+        document: Document,
+        attempt_number: int,
+        error: str,
+        processing_started_at: datetime,
+    ) -> Document:
+        return self.documents.update_processing(
+            document,
+            DocumentProcessingUpdate(
+                extracted_text=document.extracted_text,
+                summary=document.summary,
+                processing_status=DocumentProcessingStatus.PROCESSING,
+                processing_error=error,
+                processing_started_at=processing_started_at,
+                processing_completed_at=None,
                 processing_attempts=attempt_number,
             ),
         )
