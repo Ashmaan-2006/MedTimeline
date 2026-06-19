@@ -13,6 +13,7 @@ EXPECTED_STATE_KEYS = {
     "patient_id",
     "user_question",
     "intent",
+    "evidence_plan",
     "required_evidence",
     "vector_context",
     "graph_context",
@@ -35,6 +36,7 @@ def test_clinical_agent_state_has_structured_type_hints() -> None:
     assert hints["patient_id"] is str
     assert hints["user_question"] is str
     assert hints["intent"] == str | None
+    assert hints["evidence_plan"] == dict[str, Any] | None
     assert hints["required_evidence"] == list[str]
     assert hints["vector_context"] == list[dict[str, Any]]
     assert hints["graph_context"] == list[dict[str, Any]]
@@ -56,6 +58,7 @@ def test_create_initial_clinical_agent_state_sets_empty_structured_defaults() ->
         "patient_id": "patient-1",
         "user_question": "Did symptoms worsen?",
         "intent": None,
+        "evidence_plan": None,
         "required_evidence": [],
         "vector_context": [],
         "graph_context": [],

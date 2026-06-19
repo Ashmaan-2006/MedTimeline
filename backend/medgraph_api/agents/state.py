@@ -5,6 +5,7 @@ class ClinicalAgentState(TypedDict):
     patient_id: str
     user_question: str
     intent: str | None
+    evidence_plan: dict[str, Any] | None
     required_evidence: list[str]
     vector_context: list[dict[str, Any]]
     graph_context: list[dict[str, Any]]
@@ -24,6 +25,7 @@ def create_initial_clinical_agent_state(
         patient_id=patient_id,
         user_question=user_question,
         intent=None,
+        evidence_plan=None,
         required_evidence=[],
         vector_context=[],
         graph_context=[],
