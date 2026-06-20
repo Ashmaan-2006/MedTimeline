@@ -13,6 +13,8 @@ class ClinicalAgentState(TypedDict):
     contradictions: list[dict[str, Any]]
     risk_flags: list[dict[str, Any]]
     final_answer: str | None
+    answer_confidence: str | None
+    limitations: list[str]
     citations: list[dict[str, Any]]
     errors: list[str]
 
@@ -33,6 +35,8 @@ def create_initial_clinical_agent_state(
         contradictions=[],
         risk_flags=[],
         final_answer=None,
+        answer_confidence=None,
+        limitations=[],
         citations=[],
         errors=[],
     )

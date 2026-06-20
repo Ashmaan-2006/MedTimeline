@@ -21,6 +21,8 @@ EXPECTED_STATE_KEYS = {
     "contradictions",
     "risk_flags",
     "final_answer",
+    "answer_confidence",
+    "limitations",
     "citations",
     "errors",
 }
@@ -44,6 +46,8 @@ def test_clinical_agent_state_has_structured_type_hints() -> None:
     assert hints["contradictions"] == list[dict[str, Any]]
     assert hints["risk_flags"] == list[dict[str, Any]]
     assert hints["final_answer"] == str | None
+    assert hints["answer_confidence"] == str | None
+    assert hints["limitations"] == list[str]
     assert hints["citations"] == list[dict[str, Any]]
     assert hints["errors"] == list[str]
 
@@ -66,6 +70,8 @@ def test_create_initial_clinical_agent_state_sets_empty_structured_defaults() ->
         "contradictions": [],
         "risk_flags": [],
         "final_answer": None,
+        "answer_confidence": None,
+        "limitations": [],
         "citations": [],
         "errors": [],
     }
