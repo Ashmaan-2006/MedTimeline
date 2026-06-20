@@ -348,7 +348,8 @@ select {
 .document-panel,
 .timeline-panel,
 .rag-panel,
-.graph-panel {
+.graph-panel,
+.reasoning-panel {
   margin-top: 18px;
 }
 
@@ -1096,6 +1097,144 @@ select {
   min-height: 112px;
 }
 
+.reasoning-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.reasoning-confidence {
+  background: var(--accent-soft);
+  border: 1px solid #b9ded7;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 7px 10px;
+  text-transform: uppercase;
+}
+
+.reasoning-error,
+.reasoning-loading {
+  margin-bottom: 16px;
+}
+
+.reasoning-empty-state {
+  min-height: 160px;
+}
+
+.reasoning-result {
+  display: grid;
+  gap: 16px;
+}
+
+.reasoning-answer,
+.reasoning-section {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.reasoning-answer p,
+.reasoning-card p,
+.reasoning-timeline-list p {
+  color: var(--muted-strong);
+  font-size: 14px;
+  line-height: 1.58;
+  margin: 0;
+}
+
+.reasoning-section-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.reasoning-section-header h3 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.reasoning-section-header span,
+.reasoning-card span,
+.reasoning-card small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.reasoning-card-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reasoning-card,
+.reasoning-timeline-list li {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+}
+
+.reasoning-card strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.reasoning-timeline-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reasoning-timeline-list span {
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.reasoning-two-column {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reasoning-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.reasoning-limitation-list {
+  background: #fffaeb;
+  border: 1px solid #fedf89;
+  border-radius: 8px;
+  color: var(--warning);
+  display: grid;
+  font-size: 13px;
+  gap: 6px;
+  line-height: 1.45;
+  margin: 14px 0 0;
+  padding: 12px 12px 12px 28px;
+}
+
+.reasoning-compact-empty {
+  min-height: 88px;
+}
+
+.reasoning-source-list {
+  margin-top: 0;
+}
+
 @media (max-width: 1000px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1119,7 +1258,9 @@ select {
   .workspace-grid,
   .profile-grid,
   .graph-entity-grid,
-  .graph-lower-grid {
+  .graph-lower-grid,
+  .reasoning-card-grid,
+  .reasoning-two-column {
     grid-template-columns: 1fr;
   }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { ClinicalGraphPanel } from "@/components/clinical-graph-panel";
+import { ClinicalReasoningPanel } from "@/components/clinical-reasoning-panel";
 import { DocumentUploadForm } from "@/components/document-upload-form";
 import { RagChatPanel } from "@/components/rag-chat-panel";
 import type {
@@ -25,13 +26,14 @@ type PatientWorkspaceTabsProps = {
   timelineEvents: TimelineEvent[];
 };
 
-type WorkspaceTab = "timeline" | "documents" | "ask-ai" | "clinical-graph";
+type WorkspaceTab = "timeline" | "documents" | "ask-ai" | "clinical-graph" | "reasoning";
 
 const TABS: { id: WorkspaceTab; label: string }[] = [
   { id: "timeline", label: "Timeline" },
   { id: "documents", label: "Documents" },
   { id: "ask-ai", label: "Ask AI" },
   { id: "clinical-graph", label: "Clinical Graph" },
+  { id: "reasoning", label: "Reasoning" },
 ];
 
 function formatDateTime(value: string | null) {
@@ -216,6 +218,15 @@ export function PatientWorkspaceTabs({
           summary={graphSummary}
           timelineEvents={timelineEvents}
         />
+      </div>
+
+      <div
+        aria-labelledby="workspace-tab-reasoning"
+        hidden={activeTab !== "reasoning"}
+        id="workspace-panel-reasoning"
+        role="tabpanel"
+      >
+        <ClinicalReasoningPanel patientId={patientId} />
       </div>
     </section>
   );
