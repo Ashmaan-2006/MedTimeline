@@ -7,6 +7,10 @@ from medgraph_api.crud.document_chunks import DocumentChunkRepository
 from medgraph_api.crud.documents import DocumentRepository
 from medgraph_api.crud.patients import PatientRepository
 from medgraph_api.crud.timeline_events import TimelineEventRepository
+from medgraph_api.agents.clinical_reasoning_graph import (
+    ClinicalReasoningGraphServices,
+    create_clinical_reasoning_graph,
+)
 from medgraph_api.core.neo4j import neo4j_session
 from medgraph_api.db.session import get_db
 from medgraph_api.repositories.clinical_graph_repository import ClinicalGraphRepository
@@ -81,6 +85,20 @@ def get_patient_rag_query_service(
     graph_query: ClinicalGraphQueryService = Depends(get_clinical_graph_query_service),
 ) -> PatientRagQueryService:
     return PatientRagQueryService(similarity_search=similarity_search, graph_query=graph_query)
+
+
+def get_clinical_reasoning_graph(
+    similarity_search: PatientDocumentSimilaritySearchService = Depends(
+        get_patient_document_similarity_search_service
+    ),
+    graph_query: ClinicalGraphQueryService = Depends(get_clinical_graph_query_service),
+):
+    return create_clinical_reasoning_graph(
+        ClinicalReasoningGraphServices(
+            similarity_search=similarity_search,
+            graph_query=graph_query,
+        )
+    )
 
 
 def get_summary_service() -> BasicAISummaryService:

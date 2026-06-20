@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from medgraph_api.api.routes import agent
 from medgraph_api.api.routes import documents
 from medgraph_api.api.routes import graph
 from medgraph_api.api.routes import patients
@@ -31,6 +32,7 @@ app.include_router(patients.router)
 app.include_router(documents.router)
 app.include_router(graph.router)
 app.include_router(rag.router)
+app.include_router(agent.router)
 
 
 @app.get("/health", tags=["system"])
