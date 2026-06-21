@@ -52,3 +52,35 @@ def initialize_database() -> None:
                 """
             )
         )
+        connection.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_agent_runs_patient_id
+                    ON agent_runs (patient_id)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_agent_runs_intent
+                    ON agent_runs (intent)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_agent_run_steps_agent_run_id
+                    ON agent_run_steps (agent_run_id)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_agent_run_steps_step_name
+                    ON agent_run_steps (step_name)
+                """
+            )
+        )

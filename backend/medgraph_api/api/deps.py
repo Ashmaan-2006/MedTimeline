@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from medgraph_api.crud.document_chunks import DocumentChunkRepository
 from medgraph_api.crud.documents import DocumentRepository
+from medgraph_api.crud.agent_runs import AgentRunRepository
 from medgraph_api.crud.patients import PatientRepository
 from medgraph_api.crud.timeline_events import TimelineEventRepository
 from medgraph_api.agents.clinical_reasoning_graph import (
@@ -45,6 +46,10 @@ def get_timeline_event_repository(
     db: Session = Depends(get_db),
 ) -> Generator[TimelineEventRepository, None, None]:
     yield TimelineEventRepository(db)
+
+
+def get_agent_run_repository(db: Session = Depends(get_db)) -> Generator[AgentRunRepository, None, None]:
+    yield AgentRunRepository(db)
 
 
 def get_upload_storage() -> LocalUploadStorage:

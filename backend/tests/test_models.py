@@ -3,6 +3,8 @@ from medgraph_api.db.base import Base
 
 def test_initial_database_models_are_registered() -> None:
     assert set(Base.metadata.tables) == {
+        "agent_run_steps",
+        "agent_runs",
         "document_chunks",
         "documents",
         "patients",
@@ -33,3 +35,31 @@ def test_document_model_includes_processing_state_columns() -> None:
         "celery_task_id",
         "processing_attempts",
     }.issubset(document_table.columns.keys())
+
+
+def test_agent_trace_models_include_run_and_step_columns() -> None:
+    run_table = Base.metadata.tables["agent_runs"]
+    step_table = Base.metadata.tables["agent_run_steps"]
+
+    assert {
+        "id",
+        "patient_id",
+        "question",
+        "intent",
+        "status",
+        "started_at",
+        "completed_at",
+        "latency_ms",
+        "model_name",
+        "token_count",
+        "error",
+    }.issubset(run_table.columns.keys())
+    assert {
+        "id",
+        "agent_run_id",
+        "step_name",
+        "input_summary",
+        "output_summary",
+        "latency_ms",
+        "status",
+    }.issubset(step_table.columns.keys())
