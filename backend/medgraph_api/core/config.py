@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     agent_timeout_seconds: int = 60
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
+    langsmith_tracing: bool = False
+    langsmith_api_key: str | None = None
+    langsmith_project: str = "medgraph-ai"
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

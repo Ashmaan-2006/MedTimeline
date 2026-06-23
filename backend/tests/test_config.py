@@ -19,3 +19,17 @@ def test_settings_include_agent_config_defaults() -> None:
     assert settings.agent_timeout_seconds == 60
     assert settings.openai_api_key is None
     assert settings.anthropic_api_key is None
+
+
+def test_settings_include_langsmith_tracing_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("LANGSMITH_TRACING", raising=False)
+    monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+    monkeypatch.delenv("LANGSMITH_PROJECT", raising=False)
+    monkeypatch.delenv("LANGSMITH_ENDPOINT", raising=False)
+
+    settings = Settings()
+
+    assert settings.langsmith_tracing is False
+    assert settings.langsmith_api_key is None
+    assert settings.langsmith_project == "medgraph-ai"
+    assert settings.langsmith_endpoint == "https://api.smith.langchain.com"

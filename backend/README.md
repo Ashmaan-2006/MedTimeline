@@ -205,6 +205,30 @@ RAG responses include:
 - `sources`: document chunk citations like `[1]`
 - `graph_evidence`: graph relationship citations like `[G1]`
 
+## LangSmith Tracing
+
+LangSmith tracing is disabled by default. To inspect clinical reasoning runs step by step, set:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_langsmith_key
+LANGSMITH_PROJECT=medgraph-ai
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+```
+
+The clinical reasoning workflow traces these node names:
+
+- `clinical_agent.intent_classifier`
+- `clinical_agent.evidence_planner`
+- `clinical_agent.vector_retriever`
+- `clinical_agent.graph_retriever`
+- `clinical_agent.timeline_reasoner`
+- `clinical_agent.contradiction_checker`
+- `clinical_agent.risk_flagger`
+- `clinical_agent.answer_generator`
+
+The `post_retrieval` routing node is also traced so branching decisions can be inspected around retrieval fan-out and merge behavior.
+
 ## Test Coverage
 
 Run backend tests:

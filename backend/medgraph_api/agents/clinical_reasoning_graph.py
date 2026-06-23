@@ -13,6 +13,11 @@ from medgraph_api.agents.nodes.risk_flagger import flag_clinical_risks_node
 from medgraph_api.agents.nodes.timeline_reasoner import reason_over_timeline_node
 from medgraph_api.agents.nodes.vector_retriever import retrieve_vector_context_node
 from medgraph_api.agents.state import ClinicalAgentState
+from medgraph_api.core.config import get_settings
+from medgraph_api.core.langsmith_tracing import (
+    configure_langsmith_environment,
+    trace_agent_node,
+)
 from medgraph_api.services.graph_query_service import ClinicalGraphQueryService
 from medgraph_api.services.similarity_search import PatientDocumentSimilaritySearchService
 
@@ -42,23 +47,54 @@ class ClinicalReasoningGraphServices:
 def create_clinical_reasoning_graph(
     services: ClinicalReasoningGraphServices,
 ) -> CompiledStateGraph:
+    settings = get_settings()
+    configure_langsmith_environment(settings)
     graph = StateGraph(ClinicalAgentState)
 
-    graph.add_node(INTENT_CLASSIFIER_NODE, classify_intent_node)
-    graph.add_node(EVIDENCE_PLANNER_NODE, plan_evidence_node)
+    graph.add_node(
+        INTENT_CLASSIFIER_NODE,
+        trace_agent_node(INTENT_CLASSIFIER_NODE, classify_intent_node, settings),
+    )
+    graph.add_node(
+        EVIDENCE_PLANNER_NODE,
+        trace_agent_node(EVIDENCE_PLANNER_NODE, plan_evidence_node, settings),
+    )
     graph.add_node(
         VECTOR_RETRIEVER_NODE,
-        lambda state: _vector_retrieval_update(state, services),
+        trace_agent_node(
+            VECTOR_RETRIEVER_NODE,
+            lambda state: _vector_retrieval_update(state, services),
+            settings,
+        ),
     )
     graph.add_node(
         GRAPH_RETRIEVER_NODE,
-        lambda state: _graph_retrieval_update(state, services),
+        trace_agent_node(
+            GRAPH_RETRIEVER_NODE,
+            lambda state: _graph_retrieval_update(state, services),
+            settings,
+        ),
     )
-    graph.add_node(POST_RETRIEVAL_NODE, _pass_through_node)
-    graph.add_node(TIMELINE_REASONER_NODE, reason_over_timeline_node)
-    graph.add_node(CONTRADICTION_CHECKER_NODE, check_contradictions_node)
-    graph.add_node(RISK_FLAGGER_NODE, flag_clinical_risks_node)
-    graph.add_node(ANSWER_GENERATOR_NODE, generate_grounded_answer_node)
+    graph.add_node(
+        POST_RETRIEVAL_NODE,
+        trace_agent_node(POST_RETRIEVAL_NODE, _pass_through_node, settings),
+    )
+    graph.add_node(
+        TIMELINE_REASONER_NODE,
+        trace_agent_node(TIMELINE_REASONER_NODE, reason_over_timeline_node, settings),
+    )
+    graph.add_node(
+        CONTRADICTION_CHECKER_NODE,
+        trace_agent_node(CONTRADICTION_CHECKER_NODE, check_contradictions_node, settings),
+    )
+    graph.add_node(
+        RISK_FLAGGER_NODE,
+        trace_agent_node(RISK_FLAGGER_NODE, flag_clinical_risks_node, settings),
+    )
+    graph.add_node(
+        ANSWER_GENERATOR_NODE,
+        trace_agent_node(ANSWER_GENERATOR_NODE, generate_grounded_answer_node, settings),
+    )
 
     graph.add_edge(START, INTENT_CLASSIFIER_NODE)
     graph.add_edge(INTENT_CLASSIFIER_NODE, EVIDENCE_PLANNER_NODE)
