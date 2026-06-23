@@ -2,6 +2,8 @@ from typing import Any, Literal, TypedDict
 
 from medgraph_api.agents.nodes.risk_flagger import RISK_DISCLAIMER
 from medgraph_api.agents.state import ClinicalAgentState
+from medgraph_api.core.config import get_settings
+from medgraph_api.services.model_fallback import ModelFallbackRunner
 
 
 AnswerConfidence = Literal["low", "medium", "high"]
@@ -31,6 +33,22 @@ def generate_grounded_answer_node(state: ClinicalAgentState) -> ClinicalAgentSta
 
 
 def generate_grounded_clinical_answer(state: ClinicalAgentState) -> GroundedClinicalAnswer:
+    settings = get_settings()
+    result = ModelFallbackRunner(settings.agent_timeout_seconds).run(
+        primary=lambda: _generate_grounded_clinical_answer(state),
+        fallback=lambda: _generate_fallback_clinical_answer(state),
+        operation_name="answer_generation",
+    )
+    answer_payload = result.output
+    if result.used_fallback:
+        warning = result.warning or "Primary answer model failed; fallback answer was used."
+        answer_payload["answer"] = f"{answer_payload['answer']} {warning}"
+        answer_payload["confidence"] = "low"
+        answer_payload["limitations"] = [*answer_payload["limitations"], warning]
+    return answer_payload
+
+
+def _generate_grounded_clinical_answer(state: ClinicalAgentState) -> GroundedClinicalAnswer:
     citations = collect_citations(state)
     limitations = identify_limitations(state, citations)
 
@@ -76,6 +94,34 @@ def generate_grounded_clinical_answer(state: ClinicalAgentState) -> GroundedClin
         citations=citations,
         confidence=estimate_confidence(citations, limitations, state.get("contradictions", [])),
         limitations=limitations,
+    )
+
+
+def _generate_fallback_clinical_answer(state: ClinicalAgentState) -> GroundedClinicalAnswer:
+    citations = collect_citations(state)
+    if not citations:
+        return GroundedClinicalAnswer(
+            answer=(
+                "Fallback answer generation could not find retrieved evidence to support an "
+                f"answer. {RISK_DISCLAIMER}"
+            ),
+            citations=[],
+            confidence="low",
+            limitations=["Fallback answer generation had no retrieved evidence available."],
+        )
+
+    first_citation = citations[0]
+    snippet = first_citation.get("snippet") or "retrieved clinical evidence"
+    return GroundedClinicalAnswer(
+        answer=(
+            "A lower-confidence fallback answer was generated from the strongest retrieved "
+            f"evidence: {snippet} {first_citation['label']}. {RISK_DISCLAIMER}"
+        ),
+        citations=citations,
+        confidence="low",
+        limitations=[
+            "Fallback answer generation was used, so the response is intentionally conservative."
+        ],
     )
 
 

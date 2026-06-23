@@ -250,6 +250,19 @@ Instrumented boundaries include:
 
 The default exporter is the console exporter because this project runs locally through Docker. Production deployments can replace this with an OTLP exporter without changing the span names.
 
+## Model Fallbacks
+
+Model-backed workflow steps use a timeout-aware fallback wrapper. If a primary model call times out or raises a provider availability error, the workflow falls back to a cheaper or deterministic backup path and returns conservative output.
+
+Fallback-covered steps:
+
+- grounded answer generation
+- document summarization
+- clinical entity extraction
+- clinical relationship extraction
+
+Fallback answers are marked low confidence and include a warning in the answer limitations. Fallback summaries append a review warning. This keeps document processing and clinical reasoning from crashing when one model provider is slow or unavailable.
+
 ## Test Coverage
 
 Run backend tests:

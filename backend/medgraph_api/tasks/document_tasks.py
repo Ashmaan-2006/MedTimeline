@@ -8,6 +8,7 @@ from sqlalchemy.exc import DisconnectionError, OperationalError
 from sqlalchemy.orm import Session
 
 from medgraph_api.core.celery_app import celery_app
+from medgraph_api.core.config import get_settings
 from medgraph_api.core.neo4j import neo4j_session
 from medgraph_api.core.observability import SpanKind, observe_span
 from medgraph_api.crud.document_chunks import DocumentChunkRepository
@@ -33,7 +34,8 @@ from medgraph_api.services.processing_errors import (
 from medgraph_api.services.relationship_extraction_service import (
     ClinicalRelationshipExtractionService,
 )
-from medgraph_api.services.summarization import BasicAISummaryService
+from medgraph_api.services.model_fallback import FallbackTextGenerationService
+from medgraph_api.services.summarization import BasicAISummaryService, FallbackAISummaryService
 from medgraph_api.services.timeline_extraction import BasicTimelineEventExtractionService
 
 FINAL_TEMPORARY_FAILURE_MESSAGE = (
@@ -45,6 +47,7 @@ def build_document_processing_service(
     db: Session,
     graph_sync_service: ClinicalGraphSyncService | None = None,
 ) -> DocumentProcessingService:
+    settings = get_settings()
     return DocumentProcessingService(
         documents=DocumentRepository(db),
         document_chunks=DocumentChunkRepository(db),
@@ -52,12 +55,28 @@ def build_document_processing_service(
         extraction_service=DocumentExtractionService(),
         chunking_service=TextChunkingService(),
         embedding_service=HashingEmbeddingService(),
-        summary_service=BasicAISummaryService(),
+        summary_service=FallbackAISummaryService(
+            primary=BasicAISummaryService(),
+            fallback=BasicAISummaryService(max_sentences=1, max_chars=300),
+            timeout_seconds=settings.agent_timeout_seconds,
+        ),
         timeline_extraction_service=BasicTimelineEventExtractionService(),
         graph_sync_service=graph_sync_service,
-        entity_extraction_service=ClinicalEntityExtractionService(LocalClinicalEntityLLMClient()),
+        entity_extraction_service=ClinicalEntityExtractionService(
+            FallbackTextGenerationService(
+                primary=LocalClinicalEntityLLMClient().generate,
+                fallback=LocalClinicalEntityLLMClient().generate,
+                operation_name="entity_extraction",
+                timeout_seconds=settings.agent_timeout_seconds,
+            )
+        ),
         relationship_extraction_service=ClinicalRelationshipExtractionService(
-            LocalClinicalRelationshipLLMClient()
+            FallbackTextGenerationService(
+                primary=LocalClinicalRelationshipLLMClient().generate,
+                fallback=LocalClinicalRelationshipLLMClient().generate,
+                operation_name="relationship_extraction",
+                timeout_seconds=settings.agent_timeout_seconds,
+            )
         ),
     )
 

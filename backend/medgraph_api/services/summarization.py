@@ -1,5 +1,7 @@
 import re
 
+from medgraph_api.services.model_fallback import ModelFallbackRunner
+
 
 class BasicAISummaryService:
     def __init__(self, max_sentences: int = 3, max_chars: int = 600) -> None:
@@ -22,3 +24,25 @@ class BasicAISummaryService:
     def _split_sentences(self, text: str) -> list[str]:
         sentences = re.split(r"(?<=[.!?])\s+", text)
         return [sentence.strip() for sentence in sentences if sentence.strip()]
+
+
+class FallbackAISummaryService:
+    def __init__(
+        self,
+        primary: BasicAISummaryService,
+        fallback: BasicAISummaryService,
+        timeout_seconds: int,
+    ) -> None:
+        self.primary = primary
+        self.fallback = fallback
+        self.runner = ModelFallbackRunner(timeout_seconds)
+
+    def summarize(self, text: str) -> str:
+        result = self.runner.run(
+            primary=lambda: self.primary.summarize(text),
+            fallback=lambda: self.fallback.summarize(text),
+            operation_name="summarization",
+        )
+        if not result.used_fallback:
+            return result.output
+        return f"{result.output} Fallback summary used; review with lower confidence."
