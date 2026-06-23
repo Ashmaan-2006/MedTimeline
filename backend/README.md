@@ -263,6 +263,21 @@ Fallback-covered steps:
 
 Fallback answers are marked low confidence and include a warning in the answer limitations. Fallback summaries append a review warning. This keeps document processing and clinical reasoning from crashing when one model provider is slow or unavailable.
 
+## Evaluation Report
+
+Generate a portfolio-ready AI evaluation report from saved eval artifacts:
+
+```powershell
+python evals\generate_report.py
+```
+
+Default outputs:
+
+- `eval_reports/latest.md`
+- `eval_reports/latest.json`
+
+The report summarizes retrieval, graph retrieval, groundedness, timeline consistency, contradiction detection, latency p50/p95, estimated cost, and known failure modes. Pass `--retrieval`, `--graph`, `--groundedness`, `--timeline`, `--contradiction`, or `--operations` to use custom artifact paths.
+
 ## Test Coverage
 
 Run backend tests:
