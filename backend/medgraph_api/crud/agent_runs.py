@@ -3,7 +3,13 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from medgraph_api.models.agent_trace import AgentRun, AgentRunStep
+from medgraph_api.models.agent_trace import (
+    AgentEvalResult,
+    AgentRun,
+    AgentRunStep,
+    LLMCallMetric,
+    RetrievalMetric,
+)
 
 
 class AgentRunRepository:
@@ -84,3 +90,73 @@ class AgentRunRepository:
         self.db.commit()
         self.db.refresh(step)
         return step
+
+    def record_eval_result(
+        self,
+        agent_run_id: UUID,
+        evaluator_name: str,
+        eval_score: float | None,
+        latency_ms: int | None = None,
+        error_count: int = 0,
+        details_json: str | None = None,
+    ) -> AgentEvalResult:
+        result = AgentEvalResult(
+            agent_run_id=agent_run_id,
+            evaluator_name=evaluator_name,
+            eval_score=eval_score,
+            latency_ms=latency_ms,
+            error_count=error_count,
+            details_json=details_json,
+        )
+        self.db.add(result)
+        self.db.commit()
+        self.db.refresh(result)
+        return result
+
+    def record_llm_call_metric(
+        self,
+        agent_run_id: UUID,
+        step_name: str | None,
+        model_name: str | None,
+        latency_ms: int | None,
+        tokens_input: int | None,
+        tokens_output: int | None,
+        error_count: int = 0,
+    ) -> LLMCallMetric:
+        metric = LLMCallMetric(
+            agent_run_id=agent_run_id,
+            step_name=step_name,
+            model_name=model_name,
+            latency_ms=latency_ms,
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
+            error_count=error_count,
+        )
+        self.db.add(metric)
+        self.db.commit()
+        self.db.refresh(metric)
+        return metric
+
+    def record_retrieval_metric(
+        self,
+        agent_run_id: UUID,
+        retrieval_type: str,
+        latency_ms: int | None,
+        retrieved_chunk_count: int = 0,
+        graph_entity_count: int = 0,
+        graph_relationship_count: int = 0,
+        error_count: int = 0,
+    ) -> RetrievalMetric:
+        metric = RetrievalMetric(
+            agent_run_id=agent_run_id,
+            retrieval_type=retrieval_type,
+            latency_ms=latency_ms,
+            retrieved_chunk_count=retrieved_chunk_count,
+            graph_entity_count=graph_entity_count,
+            graph_relationship_count=graph_relationship_count,
+            error_count=error_count,
+        )
+        self.db.add(metric)
+        self.db.commit()
+        self.db.refresh(metric)
+        return metric

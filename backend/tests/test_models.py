@@ -3,11 +3,14 @@ from medgraph_api.db.base import Base
 
 def test_initial_database_models_are_registered() -> None:
     assert set(Base.metadata.tables) == {
+        "agent_eval_results",
         "agent_run_steps",
         "agent_runs",
         "document_chunks",
         "documents",
+        "llm_call_metrics",
         "patients",
+        "retrieval_metrics",
         "timeline_events",
     }
 
