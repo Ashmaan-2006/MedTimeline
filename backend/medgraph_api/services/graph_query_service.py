@@ -4,6 +4,8 @@ from typing import Any
 
 from neo4j import Session
 
+from medgraph_api.core.observability import SpanKind, observe_span
+
 @dataclass(frozen=True)
 class PatientGraphSummary:
     patient_id: str
@@ -311,13 +313,31 @@ class ClinicalGraphQueryService:
         return paths
 
     def _records(self, query: str, **parameters: Any) -> list[Any]:
-        return list(self.session.run(query, **parameters))
+        with observe_span(
+            "neo4j.query.records",
+            kind=SpanKind.CLIENT,
+            attributes={
+                "db.system": "neo4j",
+                "db.operation": "read",
+                "neo4j.parameter_count": len(parameters),
+            },
+        ):
+            return list(self.session.run(query, **parameters))
 
     def _single_record(self, query: str, **parameters: Any) -> Any:
-        record = self.session.run(query, **parameters).single()
-        if record is None:
-            return {}
-        return record
+        with observe_span(
+            "neo4j.query.single_record",
+            kind=SpanKind.CLIENT,
+            attributes={
+                "db.system": "neo4j",
+                "db.operation": "read",
+                "neo4j.parameter_count": len(parameters),
+            },
+        ):
+            record = self.session.run(query, **parameters).single()
+            if record is None:
+                return {}
+            return record
 
     def _normalize_entity_name(self, entity: str) -> str:
         normalized_entity = " ".join(entity.split()).strip().lower()

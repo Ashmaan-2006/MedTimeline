@@ -229,6 +229,27 @@ The clinical reasoning workflow traces these node names:
 
 The `post_retrieval` routing node is also traced so branching decisions can be inspected around retrieval fan-out and merge behavior.
 
+## OpenTelemetry
+
+OpenTelemetry instrumentation is disabled by default. To emit system-level spans, set:
+
+```env
+OTEL_ENABLED=true
+OTEL_SERVICE_NAME=medgraph-ai
+OTEL_CONSOLE_EXPORTER=true
+```
+
+Instrumented boundaries include:
+
+- FastAPI requests, with method, route, status code, latency, and failures
+- Celery document-processing tasks, with retry count, task duration, and failures
+- pgvector similarity search, with patient ID, limit, query duration, and failures
+- Neo4j graph queries, with query duration and parameter count
+- RAG answer generation and graph retrieval assembly
+- Clinical entity and relationship extraction calls treated as LLM spans
+
+The default exporter is the console exporter because this project runs locally through Docker. Production deployments can replace this with an OTLP exporter without changing the span names.
+
 ## Test Coverage
 
 Run backend tests:

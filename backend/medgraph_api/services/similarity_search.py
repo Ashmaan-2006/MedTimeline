@@ -3,6 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from medgraph_api.crud.document_chunks import DocumentChunkRepository
+from medgraph_api.core.observability import observe_span
 from medgraph_api.services.embeddings import HashingEmbeddingService
 from medgraph_api.services.retrieval_filters import RetrievalFilters
 
@@ -36,30 +37,38 @@ class PatientDocumentSimilaritySearchService:
         limit: int = 5,
         filters: RetrievalFilters | None = None,
     ) -> list[PatientDocumentSearchResult]:
-        if limit <= 0:
-            raise ValueError("limit must be greater than 0.")
+        with observe_span(
+            "rag.vector_retrieval",
+            attributes={
+                "patient.id": str(patient_id),
+                "retrieval.limit": limit,
+                "retrieval.has_filters": filters is not None,
+            },
+        ):
+            if limit <= 0:
+                raise ValueError("limit must be greater than 0.")
 
-        query_embedding = self.embedding_service.embed_text(query)
-        if not query_embedding.text:
-            return []
+            query_embedding = self.embedding_service.embed_text(query)
+            if not query_embedding.text:
+                return []
 
-        chunks = self.document_chunks.search_similar_for_patient(
-            patient_id=patient_id,
-            query_embedding=query_embedding.embedding,
-            limit=limit,
-            filters=filters,
-        )
-        return [
-            PatientDocumentSearchResult(
-                chunk_id=chunk.id,
-                document_id=chunk.document_id,
-                patient_id=chunk.patient_id,
-                chunk_index=chunk.chunk_index,
-                content=chunk.content,
-                embedding_model=chunk.embedding_model,
-                token_count=chunk.token_count,
-                chunk_metadata=chunk.chunk_metadata,
-                created_at=chunk.created_at,
+            chunks = self.document_chunks.search_similar_for_patient(
+                patient_id=patient_id,
+                query_embedding=query_embedding.embedding,
+                limit=limit,
+                filters=filters,
             )
-            for chunk in chunks
-        ]
+            return [
+                PatientDocumentSearchResult(
+                    chunk_id=chunk.id,
+                    document_id=chunk.document_id,
+                    patient_id=chunk.patient_id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    embedding_model=chunk.embedding_model,
+                    token_count=chunk.token_count,
+                    chunk_metadata=chunk.chunk_metadata,
+                    created_at=chunk.created_at,
+                )
+                for chunk in chunks
+            ]

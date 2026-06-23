@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from medgraph_api.core.observability import SpanKind, observe_span
 from medgraph_api.models.document_chunk import DocumentChunk
 from medgraph_api.schemas.document_chunk import DocumentChunkCreate
 from medgraph_api.services.retrieval_filters import RetrievalFilters
@@ -54,18 +55,23 @@ class DocumentChunkRepository:
         limit: int = 5,
         filters: RetrievalFilters | None = None,
     ) -> list[DocumentChunk]:
-        filters = filters or RetrievalFilters()
-        statement = (
-            select(DocumentChunk)
-            .where(DocumentChunk.patient_id == patient_id)
-            .where(DocumentChunk.embedding.is_not(None))
-        )
-        if filters.document_id is not None:
-            statement = statement.where(DocumentChunk.document_id == filters.document_id)
-        if filters.created_from is not None:
-            statement = statement.where(DocumentChunk.created_at >= filters.created_from)
-        if filters.created_to is not None:
-            statement = statement.where(DocumentChunk.created_at <= filters.created_to)
+        with observe_span(
+            "db.pgvector.search_similar_for_patient",
+            kind=SpanKind.CLIENT,
+            attributes={"patient.id": str(patient_id), "db.operation": "select", "db.system": "postgresql"},
+        ):
+            filters = filters or RetrievalFilters()
+            statement = (
+                select(DocumentChunk)
+                .where(DocumentChunk.patient_id == patient_id)
+                .where(DocumentChunk.embedding.is_not(None))
+            )
+            if filters.document_id is not None:
+                statement = statement.where(DocumentChunk.document_id == filters.document_id)
+            if filters.created_from is not None:
+                statement = statement.where(DocumentChunk.created_at >= filters.created_from)
+            if filters.created_to is not None:
+                statement = statement.where(DocumentChunk.created_at <= filters.created_to)
 
-        statement = statement.order_by(DocumentChunk.embedding.cosine_distance(query_embedding)).limit(limit)
-        return list(self.db.scalars(statement).all())
+            statement = statement.order_by(DocumentChunk.embedding.cosine_distance(query_embedding)).limit(limit)
+            return list(self.db.scalars(statement).all())

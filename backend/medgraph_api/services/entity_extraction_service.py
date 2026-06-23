@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from medgraph_api.core.observability import observe_span
 from medgraph_api.schemas.clinical_entity import ExtractedClinicalEntities
 
 
@@ -21,14 +22,18 @@ class ClinicalEntityExtractionService:
         self.llm_client = llm_client
 
     def extract_entities(self, source_chunk_id: UUID, chunk_text: str) -> ExtractedClinicalEntities:
-        normalized_chunk = " ".join(chunk_text.split())
-        if not normalized_chunk:
-            return ExtractedClinicalEntities()
+        with observe_span(
+            "llm.extract_clinical_entities",
+            attributes={"source.chunk_id": str(source_chunk_id), "llm.operation": "entity_extraction"},
+        ):
+            normalized_chunk = " ".join(chunk_text.split())
+            if not normalized_chunk:
+                return ExtractedClinicalEntities()
 
-        response_text = self.llm_client.generate(
-            self._build_prompt(source_chunk_id=source_chunk_id, chunk_text=normalized_chunk)
-        )
-        return self._parse_response(response_text, source_chunk_id=source_chunk_id)
+            response_text = self.llm_client.generate(
+                self._build_prompt(source_chunk_id=source_chunk_id, chunk_text=normalized_chunk)
+            )
+            return self._parse_response(response_text, source_chunk_id=source_chunk_id)
 
     def _build_prompt(self, source_chunk_id: UUID, chunk_text: str) -> str:
         return f"""

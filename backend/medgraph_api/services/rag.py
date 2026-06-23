@@ -6,6 +6,7 @@ from medgraph_api.services.similarity_search import (
     PatientDocumentSearchResult,
     PatientDocumentSimilaritySearchService,
 )
+from medgraph_api.core.observability import observe_span
 from medgraph_api.services.graph_query_service import ClinicalGraphQueryService, GraphRelationship
 from medgraph_api.services.retrieval_filters import RetrievalFilters
 
@@ -62,52 +63,56 @@ class PatientRagQueryService:
         limit: int = 5,
         filters: RetrievalFilters | None = None,
     ) -> PatientRagQueryResult:
-        normalized_question = " ".join(question.split())
-        if not normalized_question:
-            return PatientRagQueryResult(
-                patient_id=patient_id,
-                question=question,
-                answer="No question was provided.",
-                sources=[],
-                graph_evidence=[],
-            )
+        with observe_span(
+            "rag.answer_question",
+            attributes={"patient.id": str(patient_id), "retrieval.limit": limit},
+        ):
+            normalized_question = " ".join(question.split())
+            if not normalized_question:
+                return PatientRagQueryResult(
+                    patient_id=patient_id,
+                    question=question,
+                    answer="No question was provided.",
+                    sources=[],
+                    graph_evidence=[],
+                )
 
-        retrieved_sources = self.similarity_search.search(
-            patient_id=patient_id,
-            query=normalized_question,
-            limit=limit,
-            filters=filters,
-        )
-        graph_evidence = self._retrieve_graph_evidence(
-            patient_id=patient_id,
-            question=normalized_question,
-            limit=limit,
-        )
-        if not retrieved_sources and not graph_evidence:
+            retrieved_sources = self.similarity_search.search(
+                patient_id=patient_id,
+                query=normalized_question,
+                limit=limit,
+                filters=filters,
+            )
+            graph_evidence = self._retrieve_graph_evidence(
+                patient_id=patient_id,
+                question=normalized_question,
+                limit=limit,
+            )
+            if not retrieved_sources and not graph_evidence:
+                return PatientRagQueryResult(
+                    patient_id=patient_id,
+                    question=normalized_question,
+                    answer="No relevant patient document evidence was found for this question.",
+                    sources=[],
+                    graph_evidence=[],
+                )
+
+            sources = self._build_cited_sources(retrieved_sources)
+            evidence_summary = " ".join(self._cited_evidence_sentences(sources[:3]))
+            graph_summary = " ".join(self._graph_evidence_sentences(graph_evidence[:3]))
+            context_parts = [part for part in (evidence_summary, graph_summary) if part]
+            answer_prefix = (
+                "Based on the retrieved patient documents and clinical graph:"
+                if graph_evidence
+                else "Based on the retrieved patient documents:"
+            )
             return PatientRagQueryResult(
                 patient_id=patient_id,
                 question=normalized_question,
-                answer="No relevant patient document evidence was found for this question.",
-                sources=[],
-                graph_evidence=[],
+                answer=f"{answer_prefix} {' '.join(context_parts)}",
+                sources=sources,
+                graph_evidence=graph_evidence,
             )
-
-        sources = self._build_cited_sources(retrieved_sources)
-        evidence_summary = " ".join(self._cited_evidence_sentences(sources[:3]))
-        graph_summary = " ".join(self._graph_evidence_sentences(graph_evidence[:3]))
-        context_parts = [part for part in (evidence_summary, graph_summary) if part]
-        answer_prefix = (
-            "Based on the retrieved patient documents and clinical graph:"
-            if graph_evidence
-            else "Based on the retrieved patient documents:"
-        )
-        return PatientRagQueryResult(
-            patient_id=patient_id,
-            question=normalized_question,
-            answer=f"{answer_prefix} {' '.join(context_parts)}",
-            sources=sources,
-            graph_evidence=graph_evidence,
-        )
 
     def _build_cited_sources(
         self,
@@ -146,32 +151,36 @@ class PatientRagQueryService:
         question: str,
         limit: int,
     ) -> list[PatientRagGraphEvidence]:
-        if self.graph_query is None:
-            return []
+        with observe_span(
+            "rag.graph_retrieval",
+            attributes={"patient.id": str(patient_id), "retrieval.limit": limit},
+        ):
+            if self.graph_query is None:
+                return []
 
-        relationships = self.graph_query.get_relationships_for_patient(str(patient_id))
-        relevant_relationships = [
-            relationship
-            for relationship in relationships
-            if self._relationship_matches_question(relationship, question)
-        ]
-        if not relevant_relationships:
-            relevant_relationships = relationships[:limit]
+            relationships = self.graph_query.get_relationships_for_patient(str(patient_id))
+            relevant_relationships = [
+                relationship
+                for relationship in relationships
+                if self._relationship_matches_question(relationship, question)
+            ]
+            if not relevant_relationships:
+                relevant_relationships = relationships[:limit]
 
-        return [
-            PatientRagGraphEvidence(
-                citation_label=f"[G{index}]",
-                source_label=relationship.source_label,
-                source_name=relationship.source_name,
-                relationship_type=relationship.relationship_type,
-                target_label=relationship.target_label,
-                target_name=relationship.target_name,
-                evidence=relationship.evidence,
-                confidence=relationship.confidence,
-                source_chunk_id=relationship.source_chunk_id,
-            )
-            for index, relationship in enumerate(relevant_relationships[:limit], start=1)
-        ]
+            return [
+                PatientRagGraphEvidence(
+                    citation_label=f"[G{index}]",
+                    source_label=relationship.source_label,
+                    source_name=relationship.source_name,
+                    relationship_type=relationship.relationship_type,
+                    target_label=relationship.target_label,
+                    target_name=relationship.target_name,
+                    evidence=relationship.evidence,
+                    confidence=relationship.confidence,
+                    source_chunk_id=relationship.source_chunk_id,
+                )
+                for index, relationship in enumerate(relevant_relationships[:limit], start=1)
+            ]
 
     def _relationship_matches_question(
         self,

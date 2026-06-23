@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     langsmith_api_key: str | None = None
     langsmith_project: str = "medgraph-ai"
     langsmith_endpoint: str = "https://api.smith.langchain.com"
+    otel_enabled: bool = False
+    otel_service_name: str = "medgraph-ai"
+    otel_console_exporter: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

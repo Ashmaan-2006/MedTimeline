@@ -9,6 +9,7 @@ from medgraph_api.api.routes import graph
 from medgraph_api.api.routes import patients
 from medgraph_api.api.routes import rag
 from medgraph_api.core.neo4j import close_neo4j_driver
+from medgraph_api.core.observability import instrument_fastapi_app
 from medgraph_api.db.init import initialize_database
 
 
@@ -27,6 +28,7 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+instrument_fastapi_app(app)
 
 app.include_router(patients.router)
 app.include_router(documents.router)

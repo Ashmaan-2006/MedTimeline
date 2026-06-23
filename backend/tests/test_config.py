@@ -33,3 +33,11 @@ def test_settings_include_langsmith_tracing_defaults(monkeypatch) -> None:
     assert settings.langsmith_api_key is None
     assert settings.langsmith_project == "medgraph-ai"
     assert settings.langsmith_endpoint == "https://api.smith.langchain.com"
+
+
+def test_settings_include_opentelemetry_defaults() -> None:
+    settings = Settings()
+
+    assert settings.otel_enabled is False
+    assert settings.otel_service_name == "medgraph-ai"
+    assert settings.otel_console_exporter is True
