@@ -1235,6 +1235,125 @@ select {
   margin-top: 0;
 }
 
+.eval-metric-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.eval-metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.eval-metric span,
+.eval-detail-grid span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.eval-metric strong {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.eval-metric small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.eval-dashboard-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.55fr);
+  margin-bottom: 18px;
+}
+
+.eval-failure-list,
+.eval-failure-mode-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.eval-failure-list li,
+.eval-failure-mode-list li {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.eval-failure-list strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.eval-failure-list span,
+.eval-failure-mode-list li {
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.eval-detail-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.eval-detail-grid div {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.eval-detail-grid strong {
+  font-size: 18px;
+}
+
+.eval-empty-state {
+  min-height: 220px;
+}
+
+.eval-empty-state strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.eval-empty-state p {
+  margin: 0;
+}
+
+.eval-empty-state code {
+  background: var(--surface-muted);
+  border-radius: 6px;
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  padding: 2px 5px;
+}
+
+.eval-compact-empty {
+  min-height: 96px;
+}
+
 @media (max-width: 1000px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1255,6 +1374,9 @@ select {
 
   .metric-row,
   .graph-metric-row,
+  .eval-metric-grid,
+  .eval-dashboard-grid,
+  .eval-detail-grid,
   .workspace-grid,
   .profile-grid,
   .graph-entity-grid,

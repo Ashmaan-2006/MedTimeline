@@ -40,6 +40,11 @@ export default function RootLayout({
                     Timeline
                   </Link>
                 </li>
+                <li>
+                  <Link className="nav-item" href="/admin/evals">
+                    Evaluations
+                  </Link>
+                </li>
               </ul>
             </nav>
           </aside>
