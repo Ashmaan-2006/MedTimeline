@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
+import { SidebarNav } from "@/components/sidebar-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,30 +23,7 @@ export default function RootLayout({
               <span className="brand-title">MedGraph AI</span>
               <span className="brand-subtitle">Clinical timeline workspace</span>
             </div>
-            <nav>
-              <ul className="nav-list">
-                <li>
-                  <Link className="nav-item nav-item-active" href="/">
-                    Patients
-                  </Link>
-                </li>
-                <li>
-                  <Link className="nav-item" href="/">
-                    Documents
-                  </Link>
-                </li>
-                <li>
-                  <Link className="nav-item" href="/">
-                    Timeline
-                  </Link>
-                </li>
-                <li>
-                  <Link className="nav-item" href="/admin/evals">
-                    Evaluations
-                  </Link>
-                </li>
-              </ul>
-            </nav>
+            <SidebarNav />
           </aside>
           <main className="main">
             <header className="topbar">

@@ -5,6 +5,7 @@ export default function HomePage() {
     <>
       <section className="page-header">
         <div>
+          <span className="page-eyebrow">Clinical workspace</span>
           <h1 className="page-title">Patient timeline intelligence</h1>
           <p className="page-description">
             Upload clinical records, extract document text, generate summaries, and assemble a

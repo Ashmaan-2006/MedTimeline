@@ -84,6 +84,7 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
     <>
       <section className="page-header">
         <div>
+          <span className="page-eyebrow">Patient profile</span>
           <h1 className="page-title">{patientName}</h1>
           <p className="page-description">
             Longitudinal patient profile with demographics, clinical notes, and extracted timeline
@@ -113,7 +114,12 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
 
       <section className="profile-grid">
         <div className="panel">
-          <h2 className="panel-title">Patient Details</h2>
+          <div className="panel-header panel-header-bordered">
+            <div>
+              <h2 className="panel-title">Patient Details</h2>
+              <p className="panel-kicker">Identifiers and record timestamps</p>
+            </div>
+          </div>
           <dl className="detail-list">
             <div>
               <dt>Patient ID</dt>
@@ -131,7 +137,12 @@ export default async function PatientProfilePage({ params }: PatientProfilePageP
         </div>
 
         <div className="panel">
-          <h2 className="panel-title">Clinical Notes</h2>
+          <div className="panel-header panel-header-bordered">
+            <div>
+              <h2 className="panel-title">Clinical Notes</h2>
+              <p className="panel-kicker">Brief context carried into patient review</p>
+            </div>
+          </div>
           <p className="notes-body">{patient.notes ?? "No patient notes have been recorded."}</p>
         </div>
       </section>

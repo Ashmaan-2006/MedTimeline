@@ -133,6 +133,7 @@ export default async function EvaluationDashboardPage() {
       <>
         <section className="page-header">
           <div>
+            <span className="page-eyebrow">LLMOps dashboard</span>
             <h1 className="page-title">Evaluation dashboard</h1>
             <p className="page-description">
               Track retrieval quality, groundedness, timeline reasoning, contradiction detection,
@@ -163,6 +164,7 @@ export default async function EvaluationDashboardPage() {
     <>
       <section className="page-header">
         <div>
+          <span className="page-eyebrow">LLMOps dashboard</span>
           <h1 className="page-title">Evaluation dashboard</h1>
           <p className="page-description">
             LLMOps view across retrieval, clinical graph reasoning, grounded answer quality,

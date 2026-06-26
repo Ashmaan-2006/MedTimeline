@@ -129,7 +129,12 @@ export function PatientWorkspaceTabs({
         role="tabpanel"
       >
         <section className="panel timeline-panel">
-          <h2 className="panel-title">Timeline Events</h2>
+          <div className="panel-header panel-header-bordered">
+            <div>
+              <h2 className="panel-title">Timeline Events</h2>
+              <p className="panel-kicker">Chronological clinical events extracted from records</p>
+            </div>
+          </div>
           {timelineEvents.length > 0 ? (
             <ol className="timeline-list">
               {timelineEvents.map((event) => (
@@ -159,12 +164,22 @@ export function PatientWorkspaceTabs({
         role="tabpanel"
       >
         <section className="panel upload-panel">
-          <h2 className="panel-title">Upload Document</h2>
+          <div className="panel-header panel-header-bordered">
+            <div>
+              <h2 className="panel-title">Upload Document</h2>
+              <p className="panel-kicker">Queue a note, PDF, report, or clinical summary</p>
+            </div>
+          </div>
           <DocumentUploadForm patientId={patientId} />
         </section>
 
         <section className="panel document-panel">
-          <h2 className="panel-title">Extracted Summaries</h2>
+          <div className="panel-header panel-header-bordered">
+            <div>
+              <h2 className="panel-title">Extracted Summaries</h2>
+              <p className="panel-kicker">Processing state and generated document summaries</p>
+            </div>
+          </div>
           {documents.length > 0 ? (
             <div className="document-summary-list">
               {documents.map((document) => (
