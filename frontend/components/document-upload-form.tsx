@@ -119,12 +119,24 @@ export function DocumentUploadForm({
 
       if (!response.ok) {
         setStatus("error");
-        setMessage("Document was uploaded, but status polling failed.");
+        setMessage(
+          `Document was uploaded, but status polling failed with ${response.status}. Refreshing the document list.`,
+        );
+        router.refresh();
         return;
       }
 
-      const documentStatus = (await response.json()) as DocumentStatusResponse;
-      if (documentStatus.status === "queued") {
+      let documentStatus: DocumentStatusResponse;
+      try {
+        documentStatus = (await response.json()) as DocumentStatusResponse;
+      } catch {
+        setStatus("error");
+        setMessage("Document was uploaded, but the processing status response could not be read.");
+        router.refresh();
+        return;
+      }
+
+      if (documentStatus.status === "queued" || documentStatus.status === "uploaded") {
         setStatus("queued");
         setMessage("Queued for processing...");
         continue;
