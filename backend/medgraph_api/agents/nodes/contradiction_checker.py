@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from medgraph_api.agents.state import ClinicalAgentState
+from medgraph_api.services.clinical_text import split_sentences
 
 
 ClaimCategory = Literal["symptom", "medication", "lab"]
@@ -45,7 +46,8 @@ def extract_claims_from_vector_context(vector_context: list[dict[str, Any]]) -> 
     for chunk in vector_context:
         claims.extend(
             extract_claims_from_text(
-                text=chunk.get("source_snippet") or chunk.get("content") or "",
+                # Full content keeps line breaks, so table rows are judged one at a time.
+                text=chunk.get("content") or chunk.get("source_snippet") or "",
                 evidence_id=chunk.get("chunk_id"),
                 source="vector_context",
             )
@@ -96,14 +98,16 @@ def extract_claims_from_text(
     evidence_id: str | None,
     source: str,
 ) -> list[ClinicalClaim]:
-    normalized_text = normalize_text(text)
-    if not normalized_text:
-        return []
-
+    # Judge each sentence on its own: "normal kidneys" in one sentence and "elevated
+    # creatinine" in another are not a contradiction about creatinine.
     claims = []
-    claims.extend(extract_symptom_claims(normalized_text, text, evidence_id, source))
-    claims.extend(extract_medication_claims(normalized_text, text, evidence_id, source))
-    claims.extend(extract_lab_claims(normalized_text, text, evidence_id, source))
+    for sentence in split_sentences(text) or [text]:
+        normalized_text = normalize_text(sentence)
+        if not normalized_text:
+            continue
+        claims.extend(extract_symptom_claims(normalized_text, sentence, evidence_id, source))
+        claims.extend(extract_medication_claims(normalized_text, sentence, evidence_id, source))
+        claims.extend(extract_lab_claims(normalized_text, sentence, evidence_id, source))
     return claims
 
 

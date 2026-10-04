@@ -7,8 +7,17 @@ from medgraph_api.services.similarity_search import (
     PatientDocumentSimilaritySearchService,
 )
 from medgraph_api.core.observability import observe_span
+from medgraph_api.services.clinical_text import (
+    iter_passages,
+    select_relevant_passages,
+    stem_terms,
+)
 from medgraph_api.services.graph_query_service import ClinicalGraphQueryService, GraphRelationship
 from medgraph_api.services.retrieval_filters import RetrievalFilters
+from medgraph_api.services.text_snippets import build_source_snippet
+
+MAX_ANSWER_PASSAGES = 5
+MAX_PASSAGE_CHARS = 220
 
 
 @dataclass(frozen=True)
@@ -98,18 +107,28 @@ class PatientRagQueryService:
                 )
 
             sources = self._build_cited_sources(retrieved_sources)
-            evidence_summary = " ".join(self._cited_evidence_sentences(sources[:3]))
-            graph_summary = " ".join(self._graph_evidence_sentences(graph_evidence[:3]))
-            context_parts = [part for part in (evidence_summary, graph_summary) if part]
-            answer_prefix = (
-                "Based on the retrieved patient documents and clinical graph:"
-                if graph_evidence
-                else "Based on the retrieved patient documents:"
+            document_lines, matched_question = self._cited_evidence_lines(
+                sources, normalized_question
             )
+            graph_lines = self._graph_evidence_sentences(graph_evidence[:3])
+            if document_lines and not matched_question:
+                # Say so rather than presenting unrelated sentences as the answer.
+                answer_prefix = (
+                    "No retrieved passage directly addresses this question. "
+                    "Closest document evidence:"
+                )
+            elif graph_evidence:
+                answer_prefix = "Based on the retrieved patient documents and clinical graph:"
+            else:
+                answer_prefix = "Based on the retrieved patient documents:"
+            # One cited fact per bullet so the UI can render a readable list.
+            answer_lines = [answer_prefix, *document_lines]
+            if graph_lines:
+                answer_lines.extend(["Clinical graph links:", *graph_lines])
             return PatientRagQueryResult(
                 patient_id=patient_id,
                 question=normalized_question,
-                answer=f"{answer_prefix} {' '.join(context_parts)}",
+                answer="\n".join(answer_lines),
                 sources=sources,
                 graph_evidence=graph_evidence,
             )
@@ -134,16 +153,31 @@ class PatientRagQueryService:
             for index, source in enumerate(sources, start=1)
         ]
 
-    def _cited_evidence_sentences(
+    def _cited_evidence_lines(
         self,
         sources: list[PatientRagCitationSource],
-    ) -> list[str]:
-        sentences = []
-        for source in sources:
-            sentence = self._first_sentence(source.content).rstrip(".?!")
-            if sentence:
-                sentences.append(f"{sentence} {source.citation_label}.")
-        return sentences
+        question: str,
+    ) -> tuple[list[str], bool]:
+        # Rank sentences from every retrieved chunk together so the answer quotes the
+        # passages that address the question rather than whatever each chunk starts with.
+        passages = [
+            passage
+            for index, source in enumerate(sources)
+            for passage in iter_passages(
+                source.content,
+                initial_section=_chunk_section(source.chunk_metadata),
+                source_index=index,
+            )
+        ]
+        selected = select_relevant_passages(passages, question, MAX_ANSWER_PASSAGES)
+        lines = []
+        for passage in selected:
+            text = build_source_snippet(passage.display_text(), max_length=MAX_PASSAGE_CHARS)
+            if not text.endswith("..."):
+                text = text.rstrip(".?!")
+            lines.append(f"- {text} {sources[passage.source_index].citation_label}.")
+        # Fallback passages carry no score: nothing matched the question's terms.
+        return lines, any(passage.score > 0 for passage in selected)
 
     def _retrieve_graph_evidence(
         self,
@@ -159,13 +193,13 @@ class PatientRagQueryService:
                 return []
 
             relationships = self.graph_query.get_relationships_for_patient(str(patient_id))
+            # Only relationships that mention the question's terms; unrelated graph edges
+            # ("diabetes associated with hypertension") just add noise to the answer.
             relevant_relationships = [
                 relationship
                 for relationship in relationships
                 if self._relationship_matches_question(relationship, question)
             ]
-            if not relevant_relationships:
-                relevant_relationships = relationships[:limit]
 
             return [
                 PatientRagGraphEvidence(
@@ -187,62 +221,34 @@ class PatientRagQueryService:
         relationship: GraphRelationship,
         question: str,
     ) -> bool:
-        question_terms = set(self._tokenize(question))
-        relationship_terms = set(
-            self._tokenize(
-                " ".join(
-                    [
-                        relationship.source_name,
-                        relationship.target_name,
-                        relationship.relationship_type.replace("_", " "),
-                        relationship.evidence or "",
-                    ]
-                )
+        question_terms = stem_terms(question)
+        named_terms = stem_terms(
+            " ".join(
+                [
+                    relationship.source_name,
+                    relationship.target_name,
+                    relationship.relationship_type.replace("_", " "),
+                ]
             )
         )
-        return bool(question_terms & relationship_terms)
+        if question_terms & named_terms:
+            return True
+        # Evidence text is broad, so require a stronger overlap before trusting it alone.
+        evidence_terms = stem_terms(relationship.evidence or "")
+        return len(question_terms & evidence_terms) >= 2
 
     def _graph_evidence_sentences(
         self,
         graph_evidence: list[PatientRagGraphEvidence],
     ) -> list[str]:
-        sentences = []
-        for evidence in graph_evidence:
-            relationship_text = evidence.relationship_type.lower().replace("_", " ")
-            evidence_text = f"{evidence.source_name} {relationship_text} {evidence.target_name}"
-            if evidence.evidence:
-                evidence_text = f"{evidence_text}; evidence: {evidence.evidence}"
-            sentences.append(f"{evidence_text} {evidence.citation_label}.")
-        return sentences
-
-    @staticmethod
-    def _first_sentence(text: str) -> str:
-        normalized_text = " ".join(text.split())
-        for separator in (". ", "? ", "! "):
-            if separator in normalized_text:
-                return normalized_text.split(separator, maxsplit=1)[0].strip() + separator.strip()
-        return normalized_text
-
-    @staticmethod
-    def _tokenize(text: str) -> list[str]:
-        stop_words = {
-            "a",
-            "after",
-            "and",
-            "did",
-            "for",
-            "the",
-            "to",
-            "was",
-            "were",
-            "what",
-            "when",
-            "why",
-        }
+        # The evidence quote is shown in the citation card, so the answer stays one line each.
         return [
-            token
-            for token in "".join(
-                character.lower() if character.isalnum() else " " for character in text
-            ).split()
-            if len(token) > 2 and token not in stop_words
+            f"- {evidence.source_name} {evidence.relationship_type.lower().replace('_', ' ')} "
+            f"{evidence.target_name} {evidence.citation_label}."
+            for evidence in graph_evidence
         ]
+
+
+def _chunk_section(chunk_metadata: dict | None) -> str | None:
+    section = (chunk_metadata or {}).get("section")
+    return section if isinstance(section, str) else None
