@@ -2,6 +2,8 @@ import json
 import re
 from itertools import combinations
 
+from medgraph_api.services.clinical_text import split_sentences
+
 ENTITY_PATTERNS = {
     "symptom": [
         "chest pain",
@@ -87,7 +89,12 @@ class LocalClinicalRelationshipLLMClient:
         relationships = []
 
         for source, target in combinations(entities, 2):
-            relationship_type = _infer_relationship_type(chunk_text, source, target)
+            # Only link entities mentioned in the same sentence; chunk-level co-occurrence
+            # produced links like "dizziness associated with creatinine".
+            evidence = _shared_evidence(chunk_text, source["name"], target["name"])
+            if evidence is None:
+                continue
+            relationship_type = _infer_relationship_type(evidence, source, target)
             if relationship_type is None:
                 continue
 
@@ -97,7 +104,7 @@ class LocalClinicalRelationshipLLMClient:
                     "target": target["name"],
                     "type": relationship_type,
                     "source_chunk_id": source_chunk_id,
-                    "evidence": _shared_evidence(chunk_text, source["name"], target["name"]),
+                    "evidence": evidence,
                     "confidence": 0.64,
                 }
             )
@@ -162,7 +169,7 @@ def _infer_relationship_type(
         return "STARTED_AT"
     if "stopped" in normalized_chunk and source_type == "medication":
         return "STOPPED_AT"
-    if source["name"] in normalized_chunk and target["name"] in normalized_chunk:
+    if source["name"].lower() in normalized_chunk and target["name"].lower() in normalized_chunk:
         return "ASSOCIATED_WITH"
 
     return None
@@ -176,17 +183,17 @@ def _match_source_text(chunk_text: str, normalized_entity: str) -> str:
 
 
 def _evidence_sentence(chunk_text: str, normalized_entity: str) -> str:
-    for sentence in re.split(r"(?<=[.!?])\s+", chunk_text):
-        if normalized_entity in sentence.lower():
-            return sentence.strip()[:500]
+    pattern = re.compile(rf"\b{re.escape(normalized_entity)}\b", re.IGNORECASE)
+    for sentence in split_sentences(chunk_text):
+        if pattern.search(sentence):
+            return sentence[:500]
     return chunk_text.strip()[:500]
 
 
-def _shared_evidence(chunk_text: str, source: str, target: str) -> str:
-    source_lower = source.lower()
-    target_lower = target.lower()
-    for sentence in re.split(r"(?<=[.!?])\s+", chunk_text):
-        lowered_sentence = sentence.lower()
-        if source_lower in lowered_sentence and target_lower in lowered_sentence:
-            return sentence.strip()[:500]
-    return chunk_text.strip()[:500]
+def _shared_evidence(chunk_text: str, source: str, target: str) -> str | None:
+    source_pattern = re.compile(rf"\b{re.escape(source)}\b", re.IGNORECASE)
+    target_pattern = re.compile(rf"\b{re.escape(target)}\b", re.IGNORECASE)
+    for sentence in split_sentences(chunk_text):
+        if source_pattern.search(sentence) and target_pattern.search(sentence):
+            return sentence[:500]
+    return None

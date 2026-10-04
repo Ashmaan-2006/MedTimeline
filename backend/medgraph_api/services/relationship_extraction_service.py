@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from medgraph_api.core.observability import observe_span
+from medgraph_api.services.clinical_text import normalize_chunk_lines
 from medgraph_api.schemas.clinical_entity import ExtractedClinicalEntities
 from medgraph_api.schemas.clinical_relationship import ExtractedClinicalRelationships
 
@@ -36,7 +37,7 @@ class ClinicalRelationshipExtractionService:
                 "entity.count": len(entities.entities),
             },
         ):
-            normalized_chunk = " ".join(chunk_text.split())
+            normalized_chunk = normalize_chunk_lines(chunk_text)
             if not normalized_chunk or not entities.entities:
                 return ExtractedClinicalRelationships()
 

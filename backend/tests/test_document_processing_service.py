@@ -119,6 +119,12 @@ class FakeTimelineEventRepository:
         self.events.extend(payloads)
         return payloads
 
+    def delete_for_document(self, document_id: UUID) -> None:
+        self.events = [
+            event for event in self.events
+            if getattr(event, "source_document_id", None) != document_id
+        ]
+
 
 class FakeExtractionService:
     def __init__(self, text: str = "2026-01-05 Patient reports chest discomfort.") -> None:
@@ -420,3 +426,22 @@ def test_document_processing_service_stores_safe_message_for_temporary_failures(
     assert document.processing_attempts == 1
     assert document_chunks.chunks == []
     assert timeline_events.events == []
+
+
+def test_reprocessing_document_does_not_duplicate_timeline_events(document: FakeDocument) -> None:
+    timeline_events = FakeTimelineEventRepository()
+    service = DocumentProcessingService(
+        documents=FakeDocumentRepository(),
+        document_chunks=FakeDocumentChunkRepository(),
+        timeline_events=timeline_events,
+        extraction_service=FakeExtractionService(),
+        chunking_service=FakeChunkingService(),
+        embedding_service=FakeEmbeddingService(),
+        summary_service=FakeSummaryService(),
+        timeline_extraction_service=FakeTimelineExtractionService(),
+    )
+
+    service.process(document)
+    service.process(document)
+
+    assert len(timeline_events.events) == 1

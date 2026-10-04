@@ -24,7 +24,7 @@ from medgraph_api.services.graph_query_service import ClinicalGraphQueryService
 from medgraph_api.services.rag import PatientRagQueryService
 from medgraph_api.services.similarity_search import PatientDocumentSimilaritySearchService
 from medgraph_api.services.storage import LocalUploadStorage
-from medgraph_api.services.summarization import BasicAISummaryService
+from medgraph_api.services.summarization import ClinicalDocumentSummaryService, SummaryService
 from medgraph_api.services.timeline_extraction import BasicTimelineEventExtractionService
 
 
@@ -106,8 +106,8 @@ def get_clinical_reasoning_graph(
     )
 
 
-def get_summary_service() -> BasicAISummaryService:
-    return BasicAISummaryService()
+def get_summary_service() -> SummaryService:
+    return ClinicalDocumentSummaryService()
 
 
 def get_timeline_event_extraction_service() -> BasicTimelineEventExtractionService:
@@ -126,7 +126,7 @@ def get_document_processing_service(
     extraction_service: DocumentExtractionService = Depends(get_document_extraction_service),
     chunking_service: TextChunkingService = Depends(get_text_chunking_service),
     embedding_service: HashingEmbeddingService = Depends(get_embedding_service),
-    summary_service: BasicAISummaryService = Depends(get_summary_service),
+    summary_service: SummaryService = Depends(get_summary_service),
     timeline_extraction_service: BasicTimelineEventExtractionService = Depends(
         get_timeline_event_extraction_service
     ),
