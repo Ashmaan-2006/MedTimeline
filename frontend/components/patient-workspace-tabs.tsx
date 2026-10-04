@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AnswerText } from "@/components/answer-text";
 import { ClinicalGraphPanel } from "@/components/clinical-graph-panel";
 import { ClinicalReasoningPanel } from "@/components/clinical-reasoning-panel";
 import { DocumentUploadForm } from "@/components/document-upload-form";
@@ -41,13 +42,35 @@ function formatDateTime(value: string | null) {
     return "Undated";
   }
 
+  // Pin the time zone so server and browser render identical text (avoids hydration errors).
   return new Intl.DateTimeFormat("en", {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
   }).format(new Date(value));
+}
+
+function formatEventDate(value: string | null) {
+  if (value === null) {
+    return "Undated";
+  }
+
+  const date = new Date(value);
+  const isDateOnly = date.getUTCHours() === 0 && date.getUTCMinutes() === 0;
+  if (!isDateOnly) {
+    return formatDateTime(value);
+  }
+  // Clinical dates like 08-Oct-2015 are stored as UTC midnight; show them as calendar dates.
+  return new Intl.DateTimeFormat("en", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }
 
 function formatEventType(value: string) {
@@ -143,7 +166,7 @@ export function PatientWorkspaceTabs({
                   <div>
                     <div className="timeline-item-header">
                       <span className="event-type">{formatEventType(event.event_type)}</span>
-                      <time>{formatDateTime(event.occurred_at)}</time>
+                      <time>{formatEventDate(event.occurred_at)}</time>
                     </div>
                     <h3>{event.title}</h3>
                     {event.description !== null ? <p>{event.description}</p> : null}
@@ -193,15 +216,23 @@ export function PatientWorkspaceTabs({
                       {documentStatusLabel(document)}
                     </span>
                   </div>
-                  <p
-                    className={
-                      document.processing_status === "failed"
-                        ? "document-summary-message document-summary-message-error"
-                        : "document-summary-message"
-                    }
-                  >
-                    {documentStatusMessage(document)}
-                  </p>
+                  {document.processing_status === "completed" && document.summary ? (
+                    <AnswerText
+                      className="document-summary-text"
+                      scope={document.id}
+                      text={document.summary}
+                    />
+                  ) : (
+                    <p
+                      className={
+                        document.processing_status === "failed"
+                          ? "document-summary-message document-summary-message-error"
+                          : "document-summary-message"
+                      }
+                    >
+                      {documentStatusMessage(document)}
+                    </p>
+                  )}
                 </article>
               ))}
             </div>

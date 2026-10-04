@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 
+import { AnswerText, citationAnchorId } from "@/components/answer-text";
 import type { PatientDocument } from "@/lib/api";
 
 type RagSource = {
@@ -63,6 +64,8 @@ function formatDateTime(value: string) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
   }).format(new Date(value));
 }
 
@@ -189,13 +192,28 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
           messages.map((message) => (
             <article className={`chat-message chat-message-${message.role}`} key={message.id}>
               <div className="chat-role">{message.role === "user" ? "You" : "MedGraph"}</div>
-              <p>{message.content}</p>
+              {message.role === "assistant" ? (
+                <AnswerText
+                  citationLabels={[
+                    ...message.sources.map((source) => source.citation_label),
+                    ...message.graphEvidence.map((evidence) => evidence.citation_label),
+                  ]}
+                  scope={message.id}
+                  text={message.content}
+                />
+              ) : (
+                <p>{message.content}</p>
+              )}
               {message.role === "assistant" && message.sources.length > 0 ? (
                 <div className="citation-list">
                   {message.sources.map((source) => {
                     const sourceDocument = documentsById.get(source.document_id);
                     return (
-                      <details className="citation-item" key={source.chunk_id}>
+                      <details
+                        className="citation-item"
+                        id={citationAnchorId(message.id, source.citation_label)}
+                        key={source.chunk_id}
+                      >
                         <summary>
                           <span>{source.citation_label}</span>
                           {sourceDocument?.filename ?? "Source document"}
@@ -214,6 +232,7 @@ export function RagChatPanel({ patientId, documents }: RagChatPanelProps) {
                   {message.graphEvidence.map((evidence) => (
                     <details
                       className="citation-item graph-citation-item"
+                      id={citationAnchorId(message.id, evidence.citation_label)}
                       key={`${evidence.citation_label}-${evidence.source_name}-${evidence.target_name}`}
                     >
                       <summary>

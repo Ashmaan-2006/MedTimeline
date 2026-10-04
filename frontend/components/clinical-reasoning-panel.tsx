@@ -2,6 +2,8 @@
 
 import { FormEvent, useMemo, useState } from "react";
 
+import { AnswerText, citationAnchorId } from "@/components/answer-text";
+
 type AgentCitation = {
   label?: string;
   source_type?: string;
@@ -182,7 +184,11 @@ export function ClinicalReasoningPanel({ patientId }: ClinicalReasoningPanelProp
               <h3>Answer</h3>
               <span>{formatLabel(result.intent)}</span>
             </div>
-            <p>{result.answer}</p>
+            <AnswerText
+              citationLabels={result.citations.map((citation, index) => citation.label ?? `[${index + 1}]`)}
+              scope="agent"
+              text={result.answer}
+            />
             {result.limitations.length > 0 ? (
               <ul className="reasoning-limitation-list">
                 {result.limitations.map((limitation) => (
@@ -285,7 +291,11 @@ export function ClinicalReasoningPanel({ patientId }: ClinicalReasoningPanelProp
             {result.citations.length > 0 ? (
               <div className="citation-list reasoning-source-list">
                 {result.citations.map((citation, index) => (
-                  <details className="citation-item" key={`${citation.label}-${index}`}>
+                  <details
+                    className="citation-item"
+                    id={citationAnchorId("agent", citation.label ?? `[${index + 1}]`)}
+                    key={`${citation.label}-${index}`}
+                  >
                     <summary>
                       <span>{citation.label ?? `[${index + 1}]`}</span>
                       {formatLabel(citation.source_type)}

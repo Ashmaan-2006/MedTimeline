@@ -1,25 +1,18 @@
 import { NextResponse } from "next/server";
 
-const API_BASE_URL =
-  process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { proxyToBackend, readJsonBody } from "@/lib/backend-proxy";
 
 export async function POST(request: Request) {
-  const payload = await request.json();
+  const payload = await readJsonBody(request);
+  if (payload instanceof NextResponse) {
+    return payload;
+  }
 
-  const response = await fetch(`${API_BASE_URL}/patients`, {
+  return proxyToBackend("/patients", {
     method: "POST",
     headers: {
       "content-type": "application/json",
     },
     body: JSON.stringify(payload),
-  });
-
-  const responseBody = await response.text();
-
-  return new NextResponse(responseBody, {
-    status: response.status,
-    headers: {
-      "content-type": response.headers.get("content-type") ?? "application/json",
-    },
   });
 }
