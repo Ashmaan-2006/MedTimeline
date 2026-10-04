@@ -3,6 +3,7 @@ from pathlib import Path
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
+from medgraph_api.services.clinical_text import clean_clinical_text
 from medgraph_api.services.processing_errors import PermanentDocumentProcessingError
 
 
@@ -27,11 +28,12 @@ class DocumentExtractionService:
         if not path.exists():
             raise MissingDocumentFileError()
 
+        # Clean once here so summaries, chunks, timeline, and graph all see readable text.
         if self._is_pdf(path, content_type):
-            return self._extract_pdf_text(path)
+            return clean_clinical_text(self._extract_pdf_text(path))
 
         if self._is_text(path, content_type):
-            return self._extract_plain_text(path)
+            return clean_clinical_text(self._extract_plain_text(path))
 
         raise UnsupportedDocumentTypeError()
 

@@ -3,7 +3,12 @@ from typing import Any, Literal, TypedDict
 from medgraph_api.agents.nodes.risk_flagger import RISK_DISCLAIMER
 from medgraph_api.agents.state import ClinicalAgentState
 from medgraph_api.core.config import get_settings
+from medgraph_api.services.clinical_text import stem_terms
 from medgraph_api.services.model_fallback import ModelFallbackRunner
+from medgraph_api.services.text_snippets import build_source_snippet
+
+TIMELINE_INTENTS = {"timeline_summary", "medication_history", "symptom_progression", "lab_trend"}
+MAX_VECTOR_ANSWER_ITEMS = 3
 
 
 AnswerConfidence = Literal["low", "medium", "high"]
@@ -41,8 +46,8 @@ def generate_grounded_clinical_answer(state: ClinicalAgentState) -> GroundedClin
     )
     answer_payload = result.output
     if result.used_fallback:
+        # Keep operational details out of the clinician-facing answer text.
         warning = result.warning or "Primary answer model failed; fallback answer was used."
-        answer_payload["answer"] = f"{answer_payload['answer']} {warning}"
         answer_payload["confidence"] = "low"
         answer_payload["limitations"] = [*answer_payload["limitations"], warning]
     return answer_payload
@@ -64,11 +69,23 @@ def _generate_grounded_clinical_answer(state: ClinicalAgentState) -> GroundedCli
         )
 
     answer_sections = []
-    timeline_summary = build_timeline_summary(state.get("timeline_context", []), citations)
-    if timeline_summary:
-        answer_sections.append(timeline_summary)
+    vector_context = state.get("vector_context", [])
+    # Lead with the sentences that address the question; supporting context follows.
+    vector_summary = build_vector_summary(vector_context, citations)
+    if vector_summary:
+        answer_sections.append(vector_summary)
 
-    graph_summary = build_graph_summary(state.get("graph_context", []), citations)
+    # Timeline events mirror the retrieved chunks, so only repeat them for time-based questions.
+    if state.get("intent") in TIMELINE_INTENTS or not vector_context:
+        timeline_summary = build_timeline_summary(state.get("timeline_context", []), citations)
+        if timeline_summary:
+            answer_sections.append(timeline_summary)
+
+    graph_summary = build_graph_summary(
+        state.get("graph_context", []),
+        citations,
+        question=state.get("user_question", ""),
+    )
     if graph_summary:
         answer_sections.append(graph_summary)
 
@@ -80,12 +97,9 @@ def _generate_grounded_clinical_answer(state: ClinicalAgentState) -> GroundedCli
     if risk_summary:
         answer_sections.append(risk_summary)
 
-    if not answer_sections:
-        answer_sections.append(build_vector_summary(state.get("vector_context", []), citations))
-
-    answer = " ".join(section for section in answer_sections if section)
+    answer = "\n\n".join(section for section in answer_sections if section)
     answer = (
-        f"{answer} This is an evidence-grounded summary, not a diagnosis. "
+        f"{answer}\n\nThis is an evidence-grounded summary, not a diagnosis. "
         f"Uncertainty remains where retrieved records are incomplete. {RISK_DISCLAIMER}"
     )
 
@@ -147,7 +161,7 @@ def collect_vector_citations(
                 "source_type": "vector_chunk",
                 "evidence_id": item.get("chunk_id"),
                 "document_id": item.get("document_id"),
-                "snippet": item.get("source_snippet") or item.get("content"),
+                "snippet": build_source_snippet(vector_item_text(item)),
             }
         )
     return citations
@@ -249,16 +263,19 @@ def build_timeline_summary(
     cited_events = []
     for event in timeline_context[:3]:
         citation_label = find_citation_label(citations, event.get("chunk_id") or event.get("event_id"))
-        cited_events.append(
-            f"{event.get('display_date', 'An available date')}: "
-            f"{event.get('summary', 'timeline evidence was noted')} {citation_label}"
+        summary = build_source_snippet(
+            str(event.get("summary") or "timeline evidence was noted"), max_length=200
         )
-    return "Timeline evidence shows " + "; ".join(cited_events) + "."
+        cited_events.append(
+            f"- {event.get('display_date', 'An available date')}: {summary} {citation_label}"
+        )
+    return "\n".join(["Timeline evidence:", *cited_events])
 
 
 def build_graph_summary(
     graph_context: list[dict[str, Any]],
     citations: list[dict[str, Any]],
+    question: str = "",
 ) -> str:
     relationships = [
         item
@@ -266,6 +283,18 @@ def build_graph_summary(
         if section.get("type") == "relationships"
         for item in section.get("items", [])
     ]
+    if question:
+        # Without target entities the graph returns every edge; keep only on-topic ones.
+        question_terms = stem_terms(question)
+        relationships = [
+            item
+            for item in relationships
+            if question_terms
+            & stem_terms(
+                f"{item.get('source_name', '')} {item.get('target_name', '')} "
+                f"{str(item.get('relationship_type', '')).replace('_', ' ')}"
+            )
+        ]
     if not relationships:
         return ""
 
@@ -321,12 +350,12 @@ def build_vector_summary(
 ) -> str:
     if not vector_context:
         return ""
-    item = vector_context[0]
-    citation_label = find_citation_label(citations, item.get("chunk_id"))
-    return (
-        "Retrieved document evidence states: "
-        f"{item.get('source_snippet') or item.get('content')} {citation_label}."
-    )
+    lines = []
+    for item in vector_context[:MAX_VECTOR_ANSWER_ITEMS]:
+        citation_label = find_citation_label(citations, item.get("chunk_id"))
+        snippet = build_source_snippet(vector_item_text(item))
+        lines.append(f"- {snippet.rstrip('.')} {citation_label}.")
+    return "\n".join(["Retrieved document evidence states:", *lines])
 
 
 def identify_limitations(
@@ -379,6 +408,11 @@ def find_citation_label(
             if citation.get("source_type") == fallback_source_type:
                 return citation["label"]
     return citations[0]["label"] if citations else ""
+
+
+def vector_item_text(item: dict[str, Any]) -> str:
+    # Prefer the question-focused snippet so answers quote the relevant sentences.
+    return item.get("relevant_snippet") or item.get("source_snippet") or item.get("content") or ""
 
 
 def format_graph_item_snippet(item: dict[str, Any]) -> str:

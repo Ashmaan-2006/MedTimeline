@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_BASE_URL =
-  process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { proxyToBackend, readJsonBody } from "@/lib/backend-proxy";
 
 type RagQueryRouteContext = {
   params: Promise<{
@@ -11,25 +10,16 @@ type RagQueryRouteContext = {
 
 export async function POST(request: Request, { params }: RagQueryRouteContext) {
   const { patientId } = await params;
-  const payload = await request.json();
+  const payload = await readJsonBody(request);
+  if (payload instanceof NextResponse) {
+    return payload;
+  }
 
-  const response = await fetch(
-    `${API_BASE_URL}/patients/${encodeURIComponent(patientId)}/rag/query`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    },
-  );
-
-  const responseBody = await response.text();
-
-  return new NextResponse(responseBody, {
-    status: response.status,
+  return proxyToBackend(`/patients/${encodeURIComponent(patientId)}/rag/query`, {
+    method: "POST",
     headers: {
-      "content-type": response.headers.get("content-type") ?? "application/json",
+      "content-type": "application/json",
     },
+    body: JSON.stringify(payload),
   });
 }

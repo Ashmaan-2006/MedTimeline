@@ -35,7 +35,11 @@ from medgraph_api.services.relationship_extraction_service import (
     ClinicalRelationshipExtractionService,
 )
 from medgraph_api.services.model_fallback import FallbackTextGenerationService
-from medgraph_api.services.summarization import BasicAISummaryService, FallbackAISummaryService
+from medgraph_api.services.summarization import (
+    BasicAISummaryService,
+    ClinicalDocumentSummaryService,
+    FallbackAISummaryService,
+)
 from medgraph_api.services.timeline_extraction import BasicTimelineEventExtractionService
 
 FINAL_TEMPORARY_FAILURE_MESSAGE = (
@@ -56,7 +60,7 @@ def build_document_processing_service(
         chunking_service=TextChunkingService(),
         embedding_service=HashingEmbeddingService(),
         summary_service=FallbackAISummaryService(
-            primary=BasicAISummaryService(),
+            primary=ClinicalDocumentSummaryService(),
             fallback=BasicAISummaryService(max_sentences=1, max_chars=300),
             timeout_seconds=settings.agent_timeout_seconds,
         ),

@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 
+from medgraph_api.services.clinical_text import section_path_at
+
 
 @dataclass(frozen=True)
 class TextChunk:
     chunk_index: int
     content: str
     token_count: int
-    metadata: dict[str, int]
+    metadata: dict[str, int | str]
 
 
 class TextChunkingService:
@@ -34,22 +36,26 @@ class TextChunkingService:
             content = normalized_text[start:end].strip()
 
             if content:
+                metadata: dict[str, int | str] = {"char_start": start, "char_end": end}
+                # Chunks that begin mid-section keep their heading for retrieval and display.
+                section = section_path_at(normalized_text, start)
+                if section:
+                    metadata["section"] = section
                 chunks.append(
                     TextChunk(
                         chunk_index=len(chunks),
                         content=content,
                         token_count=self._estimate_token_count(content),
-                        metadata={
-                            "char_start": start,
-                            "char_end": end,
-                        },
+                        metadata=metadata,
                     )
                 )
 
             if end == len(normalized_text):
                 break
 
-            start = self._find_next_chunk_start(normalized_text, end)
+            next_start = self._find_next_chunk_start(normalized_text, end)
+            # Always make forward progress so pathological text cannot loop forever.
+            start = next_start if start < next_start <= end else end
 
         return chunks
 
@@ -63,34 +69,63 @@ class TextChunkingService:
         if hard_end == len(text):
             return hard_end
 
-        paragraph_break = text.rfind("\n", start, hard_end)
-        if paragraph_break > start:
+        # Breaks inside the overlap window would make the next chunk start before this one.
+        min_break = start + self.overlap_chars + 1
+
+        paragraph_break = text.rfind("\n", min_break, hard_end)
+        if paragraph_break >= min_break:
             return paragraph_break
 
-        sentence_breaks = [text.rfind(separator, start, hard_end) for separator in (". ", "! ", "? ")]
+        sentence_breaks = [
+            text.rfind(separator, min_break, hard_end) for separator in (". ", "! ", "? ")
+        ]
         sentence_break = max(sentence_breaks)
-        if sentence_break > start:
+        if sentence_break >= min_break:
             return sentence_break + 1
 
-        word_break = text.rfind(" ", start, hard_end)
-        if word_break > start:
+        word_break = text.rfind(" ", min_break, hard_end)
+        if word_break >= min_break:
             return word_break
 
         return hard_end
 
     def _find_next_chunk_start(self, text: str, previous_end: int) -> int:
-        start = max(0, previous_end - self.overlap_chars)
-        if start == 0:
-            return start
-        if text[start - 1].isspace():
-            return start
+        window_start = max(0, previous_end - self.overlap_chars)
 
+        # Start the overlap on a line or sentence boundary so chunks never open mid-sentence.
+        boundary = self._first_boundary_in(text, window_start, previous_end)
+        if boundary is not None:
+            return self._skip_whitespace(text, boundary)
+
+        ended_on_boundary = text[previous_end - 1] in ".!?" or text[previous_end] == "\n"
+        if ended_on_boundary:
+            return self._skip_whitespace(text, previous_end)
+
+        # Mid-sentence break with no boundary in the window: fall back to word overlap.
+        start = window_start
+        if start == 0 or text[start - 1].isspace():
+            return start
         while start < len(text) and not text[start].isspace():
             start += 1
-        while start < len(text) and text[start].isspace():
-            start += 1
+        return self._skip_whitespace(text, start)
 
-        return start
+    def _first_boundary_in(self, text: str, window_start: int, window_end: int) -> int | None:
+        candidates = []
+        newline = text.find("\n", window_start, window_end)
+        if newline != -1:
+            candidates.append(newline + 1)
+        for separator in (". ", "! ", "? "):
+            index = text.find(separator, window_start, window_end)
+            if index != -1:
+                candidates.append(index + len(separator))
+        candidates = [candidate for candidate in candidates if candidate < window_end]
+        return min(candidates) if candidates else None
+
+    @staticmethod
+    def _skip_whitespace(text: str, position: int) -> int:
+        while position < len(text) and text[position].isspace():
+            position += 1
+        return position
 
     def _estimate_token_count(self, text: str) -> int:
         return len(text.split())

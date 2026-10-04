@@ -216,3 +216,94 @@ def test_rag_service_can_answer_from_graph_when_vector_search_has_no_sources() -
     assert result.sources == []
     assert len(result.graph_evidence) == 1
     assert "clinical graph" in result.answer
+
+
+def test_rag_service_caps_unpunctuated_chunks_and_lists_one_fact_per_line() -> None:
+    patient_id = uuid4()
+    sources = [
+        PatientDocumentSearchResult(
+            chunk_id=uuid4(),
+            document_id=uuid4(),
+            patient_id=patient_id,
+            chunk_index=index,
+            content=content,
+            embedding_model="local-hashing-embedding-v1",
+            token_count=None,
+            chunk_metadata=None,
+            created_at=datetime.now(UTC),
+        )
+        for index, content in enumerate(["chest pain " * 200, "Troponin was negative."])
+    ]
+
+    result = PatientRagQueryService(
+        similarity_search=FakeSimilaritySearchService(results=sources)
+    ).answer_question(patient_id=patient_id, question="chest pain and troponin?")
+
+    lines = result.answer.split("\n")
+    assert lines[0] == "Based on the retrieved patient documents:"
+    assert lines[1].startswith("- ") and lines[1].endswith("... [1].")
+    assert len(lines[1]) < 240
+    assert lines[2] == "- Troponin was negative [2]."
+
+
+def test_rag_service_skips_graph_relationships_unrelated_to_question() -> None:
+    patient_id = uuid4()
+    source = PatientDocumentSearchResult(
+        chunk_id=uuid4(),
+        document_id=uuid4(),
+        patient_id=patient_id,
+        chunk_index=0,
+        content="Allergies:\n- Latex causes rashes",
+        embedding_model="local-hashing-embedding-v1",
+        token_count=5,
+        chunk_metadata={"char_start": 0, "char_end": 31},
+        created_at=datetime.now(UTC),
+    )
+    graph_query = FakeGraphQueryService(
+        relationships=[
+            GraphRelationship(
+                source_label="Diagnosis",
+                source_name="diabetes",
+                relationship_type="ASSOCIATED_WITH",
+                target_label="Diagnosis",
+                target_name="hypertension",
+                evidence="Hypertension, Type 2 diabetes with no known complications",
+                confidence=0.64,
+                source_chunk_id="chunk-1",
+            )
+        ]
+    )
+
+    result = PatientRagQueryService(
+        similarity_search=FakeSimilaritySearchService(results=[source]),
+        graph_query=graph_query,
+    ).answer_question(patient_id=patient_id, question="Does he have any allergies?")
+
+    assert result.graph_evidence == []
+    assert result.answer == (
+        "Based on the retrieved patient documents:\n- Allergies: Latex causes rashes [1]."
+    )
+
+
+def test_rag_service_flags_answers_without_a_direct_match() -> None:
+    patient_id = uuid4()
+    source = PatientDocumentSearchResult(
+        chunk_id=uuid4(),
+        document_id=uuid4(),
+        patient_id=patient_id,
+        chunk_index=0,
+        content="The patient was stepped down to oral ciprofloxacin for fourteen days.",
+        embedding_model="local-hashing-embedding-v1",
+        token_count=11,
+        chunk_metadata=None,
+        created_at=datetime.now(UTC),
+    )
+
+    result = PatientRagQueryService(
+        similarity_search=FakeSimilaritySearchService(results=[source]),
+    ).answer_question(patient_id=patient_id, question="Is there a history of asthma?")
+
+    assert result.answer.splitlines() == [
+        "No retrieved passage directly addresses this question. Closest document evidence:",
+        "- The patient was stepped down to oral ciprofloxacin for fourteen days [1].",
+    ]

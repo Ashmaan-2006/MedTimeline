@@ -39,6 +39,9 @@ def extract_vector_timeline_events(vector_context: list[dict[str, Any]]) -> list
             or chunk.get("event_date")
             or nested_get(chunk, ["chunk_metadata", "occurred_at"])
             or nested_get(chunk, ["chunk_metadata", "event_date"])
+            # A date in the question-relevant sentences beats the chunk's first date,
+            # which is often a header field such as date of birth.
+            or extract_date_from_text(chunk.get("relevant_snippet") or "")
             or extract_date_from_text(chunk.get("content", ""))
             or chunk.get("created_at")
         )
@@ -49,13 +52,13 @@ def extract_vector_timeline_events(vector_context: list[dict[str, Any]]) -> list
             {
                 "occurred_at": occurred_at,
                 "summary": summarize_evidence_text(
-                    chunk.get("source_snippet") or chunk.get("content") or "Relevant document chunk."
+                    chunk_evidence_text(chunk) or "Relevant document chunk."
                 ),
                 "source": "vector",
                 "document_id": chunk.get("document_id"),
                 "chunk_id": chunk.get("chunk_id"),
                 "confidence": chunk.get("similarity_score"),
-                "evidence": chunk.get("source_snippet") or chunk.get("content"),
+                "evidence": chunk_evidence_text(chunk),
             }
         )
     return events
@@ -206,6 +209,12 @@ def deduplicate_timeline_events(events: list[dict[str, Any]]) -> list[dict[str, 
     return deduplicated_events
 
 
+DAY_MONTH_YEAR_PATTERN = re.compile(
+    r"\b(\d{1,2})-(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*-(\d{4})\b",
+    flags=re.IGNORECASE,
+)
+
+
 def parse_temporal_value(value: Any) -> datetime | None:
     if value is None:
         return None
@@ -217,6 +226,11 @@ def parse_temporal_value(value: Any) -> datetime | None:
         return None
 
     normalized_value = value.strip()
+    day_month_year = DAY_MONTH_YEAR_PATTERN.fullmatch(normalized_value)
+    if day_month_year is not None:
+        day, month, year = day_month_year.groups()
+        parsed_day = datetime.strptime(f"{day}-{month.title()}-{year}", "%d-%b-%Y")
+        return parsed_day.replace(tzinfo=UTC)
     try:
         parsed_value = datetime.fromisoformat(normalized_value.replace("Z", "+00:00"))
     except ValueError:
@@ -258,10 +272,20 @@ def parse_month_day_year(text: str) -> date | None:
     return date(int(year_text or datetime.now(UTC).year), month_number, int(day_text))
 
 
+def chunk_evidence_text(chunk: dict[str, Any]) -> str | None:
+    # Question-focused sentences read better than the chunk's opening characters.
+    return chunk.get("relevant_snippet") or chunk.get("source_snippet") or chunk.get("content")
+
+
 def extract_date_from_text(text: str) -> str | None:
     iso_match = re.search(r"\b\d{4}-\d{2}-\d{2}\b", text)
     if iso_match:
         return iso_match.group(0)
+
+    # Discharge summaries and lab tables commonly write dates as 08-Oct-2015.
+    day_month_year_match = DAY_MONTH_YEAR_PATTERN.search(text)
+    if day_month_year_match:
+        return day_month_year_match.group(0)
 
     month_match = re.search(
         r"\b("
@@ -314,7 +338,11 @@ def ensure_terminal_punctuation(text: str) -> str:
 
 
 def format_display_date(value: datetime) -> str:
-    return f"{value.strftime('%B')} {value.day}"
+    display = f"{value.strftime('%B')} {value.day}"
+    # Older records need the year to be unambiguous ("October 14, 2015").
+    if value.year != datetime.now(UTC).year:
+        display = f"{display}, {value.year}"
+    return display
 
 
 def nested_get(payload: dict[str, Any], keys: list[str]) -> Any:

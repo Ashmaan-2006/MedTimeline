@@ -19,7 +19,7 @@ from medgraph_api.services.processing_errors import (
 from medgraph_api.services.relationship_extraction_service import (
     ClinicalRelationshipExtractionService,
 )
-from medgraph_api.services.summarization import BasicAISummaryService
+from medgraph_api.services.summarization import SummaryService
 from medgraph_api.services.timeline_extraction import BasicTimelineEventExtractionService
 
 RETRYABLE_PROCESSING_ERROR_MESSAGE = "Temporary processing issue. Retrying automatically."
@@ -34,7 +34,7 @@ class DocumentProcessingService:
         extraction_service: DocumentExtractionService,
         chunking_service: TextChunkingService,
         embedding_service: HashingEmbeddingService,
-        summary_service: BasicAISummaryService,
+        summary_service: SummaryService,
         timeline_extraction_service: BasicTimelineEventExtractionService,
         graph_sync_service: ClinicalGraphSyncService | None = None,
         entity_extraction_service: ClinicalEntityExtractionService | None = None,
@@ -163,6 +163,8 @@ class DocumentProcessingService:
             source_document_id=document.id,
             text=extracted_text,
         )
+        # Replace rather than append so Celery retries do not duplicate events.
+        self.timeline_events.delete_for_document(document.id)
         self.timeline_events.create_many(extracted_events)
 
     def _build_clinical_graph(self, chunks: list[DocumentChunk]) -> None:

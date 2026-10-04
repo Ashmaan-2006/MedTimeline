@@ -8,6 +8,8 @@ from medgraph_api.services.similarity_search import (
     PatientDocumentSearchResult,
     PatientDocumentSimilaritySearchService,
 )
+from medgraph_api.services.clinical_text import iter_passages, select_relevant_passages
+from medgraph_api.services.text_snippets import build_source_snippet
 
 
 class VectorRetrievalNode:
@@ -60,7 +62,10 @@ def retrieve_vector_context_node(
         return _append_error(state, "Vector retrieval failed.")
 
     next_state = state.copy()
-    next_state["vector_context"] = [format_vector_context(result) for result in results]
+    next_state["vector_context"] = [
+        format_vector_context(result, question=state.get("user_question", ""))
+        for result in results
+    ]
     return next_state
 
 
@@ -81,7 +86,10 @@ def build_retrieval_filters(evidence_plan: dict[str, Any]) -> RetrievalFilters |
     )
 
 
-def format_vector_context(result: PatientDocumentSearchResult) -> dict[str, Any]:
+def format_vector_context(
+    result: PatientDocumentSearchResult,
+    question: str = "",
+) -> dict[str, Any]:
     return {
         "chunk_id": str(result.chunk_id),
         "document_id": str(result.document_id),
@@ -89,6 +97,11 @@ def format_vector_context(result: PatientDocumentSearchResult) -> dict[str, Any]
         "chunk_index": result.chunk_index,
         "content": result.content,
         "source_snippet": build_source_snippet(result.content),
+        "relevant_snippet": build_relevant_snippet(
+            result.content,
+            question=question,
+            section=(result.chunk_metadata or {}).get("section"),
+        ),
         "similarity_score": getattr(result, "similarity_score", None),
         "embedding_model": result.embedding_model,
         "token_count": result.token_count,
@@ -97,16 +110,28 @@ def format_vector_context(result: PatientDocumentSearchResult) -> dict[str, Any]
     }
 
 
-def build_source_snippet(content: str, max_length: int = 280) -> str:
-    normalized_content = " ".join(content.split())
-    if len(normalized_content) <= max_length:
-        return normalized_content
-
-    truncated = normalized_content[: max_length - 3].rstrip()
-    word_boundary = truncated.rfind(" ")
-    if word_boundary > 0:
-        truncated = truncated[:word_boundary]
-    return truncated + "..."
+def build_relevant_snippet(
+    content: str,
+    question: str,
+    section: str | None = None,
+    max_length: int = 280,
+) -> str:
+    """Quote the sentences in a chunk that address the question, not just its opening."""
+    passages = iter_passages(content, initial_section=section)
+    selected = select_relevant_passages(passages, question, limit=2)
+    if not selected:
+        return build_source_snippet(content, max_length=max_length)
+    if len(selected) > 1 and len({passage.heading for passage in selected}) == 1:
+        # Same section: "Unchanged Medications: Proferrin ...; Ramipril ..." reads better
+        # than repeating the heading for each item.
+        joined = "; ".join(passage.text.rstrip(".") for passage in selected)
+        text = f"{selected[0].heading}: {joined}." if selected[0].heading else f"{joined}."
+        return build_source_snippet(text, max_length=max_length)
+    sentences = [
+        text if text.endswith((".", "!", "?")) else f"{text}."
+        for text in (passage.display_text() for passage in selected)
+    ]
+    return build_source_snippet(" ".join(sentences), max_length=max_length)
 
 
 def _parse_date_boundary(value: str | None, end_of_day: bool) -> datetime | None:

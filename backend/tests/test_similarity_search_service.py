@@ -75,7 +75,7 @@ def test_search_embeds_query_and_returns_ranked_chunk_results() -> None:
     )
 
     assert repository.last_patient_id == patient_id
-    assert repository.last_limit == 3
+    assert repository.last_limit == 20
     assert repository.last_query_embedding is not None
     assert len(repository.last_query_embedding) == 384
     assert len(results) == 1
@@ -129,3 +129,35 @@ def test_search_passes_retrieval_filters_to_repository() -> None:
     )
 
     assert repository.last_filters == filters
+
+
+def test_search_reranks_vector_candidates_by_question_terms() -> None:
+    patient_id = uuid4()
+
+    def chunk(index: int, content: str) -> FakeDocumentChunk:
+        return FakeDocumentChunk(
+            id=uuid4(),
+            document_id=uuid4(),
+            patient_id=patient_id,
+            chunk_index=index,
+            content=content,
+            embedding_model="local-hashing-embedding-v1",
+            token_count=None,
+            chunk_metadata=None,
+            created_at=datetime.now(UTC),
+        )
+
+    repository = FakeDocumentChunkRepository(
+        chunks=[
+            chunk(0, "The patient was stepped down to oral ciprofloxacin."),
+            chunk(1, "Upon arrival the patient presented with fever."),
+            chunk(2, "Pre-Existing:\n- Hypertension, Type 2 diabetes with no known complications"),
+        ]
+    )
+
+    results = PatientDocumentSimilaritySearchService(
+        document_chunks=repository,
+        embedding_service=HashingEmbeddingService(),
+    ).search(patient_id=patient_id, query="Does the patient have diabetes?", limit=2)
+
+    assert [result.chunk_index for result in results] == [2, 0]

@@ -126,3 +126,54 @@ def test_estimate_confidence_uses_evidence_and_limitations() -> None:
     assert estimate_confidence([{}, {}, {}, {}], [], []) == "high"
     assert estimate_confidence([{}, {}], ["No graph evidence."], []) == "medium"
     assert estimate_confidence([{}], ["No graph evidence."], []) == "low"
+
+
+def test_grounded_answer_caps_raw_chunk_content_and_separates_paragraphs() -> None:
+    state = create_initial_clinical_agent_state("patient-1", "What happened?")
+    state["vector_context"] = [
+        {"chunk_id": "chunk_1", "document_id": "document_1", "content": "dizziness " * 300}
+    ]
+
+    answer = GroundedAnswerGenerationNode()(state)["final_answer"]
+
+    first_paragraph, *rest = answer.split("\n\n")
+    assert first_paragraph.startswith("Retrieved document evidence states:")
+    assert len(first_paragraph) < 340
+    assert "not a diagnosis" in rest[-1]
+
+
+def test_grounded_answer_leads_with_document_evidence_and_skips_off_topic_graph() -> None:
+    state = create_initial_clinical_agent_state("patient-1", "Which medications were started?")
+    state["intent"] = "general_question"
+    state["vector_context"] = [
+        {
+            "chunk_id": "chunk_1",
+            "document_id": "document_1",
+            "relevant_snippet": "New Medications: Tamsulosin 0.4mg po QHS.",
+            "content": "DISCHARGE PLAN\nNew Medications:\n- Tamsulosin 0.4mg po QHS",
+        }
+    ]
+    state["timeline_context"] = [
+        {"display_date": "October 3", "summary": "Upload-dated chunk.", "chunk_id": "chunk_1"}
+    ]
+    state["graph_context"] = [
+        {
+            "type": "relationships",
+            "items": [
+                {
+                    "source_name": "diabetes",
+                    "relationship_type": "ASSOCIATED_WITH",
+                    "target_name": "hypertension",
+                    "source_chunk_id": "chunk_9",
+                }
+            ],
+        }
+    ]
+
+    answer = generate_grounded_clinical_answer(state)["answer"]
+
+    assert answer.startswith(
+        "Retrieved document evidence states:\n- New Medications: Tamsulosin 0.4mg po QHS [1]."
+    )
+    assert "Timeline evidence" not in answer
+    assert "diabetes" not in answer

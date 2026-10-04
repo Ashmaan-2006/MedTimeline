@@ -11,4 +11,4 @@ class DocumentChunkCreate(BaseModel):
     embedding: list[float]
     embedding_model: str
     token_count: int
-    chunk_metadata: dict[str, int]
+    chunk_metadata: dict[str, int | str]

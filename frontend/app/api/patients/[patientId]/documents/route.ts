@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_BASE_URL =
-  process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { proxyToBackend } from "@/lib/backend-proxy";
 
 type UploadRouteContext = {
   params: Promise<{
@@ -11,22 +10,17 @@ type UploadRouteContext = {
 
 export async function POST(request: Request, { params }: UploadRouteContext) {
   const { patientId } = await params;
-  const formData = await request.formData();
 
-  const response = await fetch(
-    `${API_BASE_URL}/patients/${encodeURIComponent(patientId)}/documents`,
-    {
-      method: "POST",
-      body: formData,
-    },
-  );
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return NextResponse.json({ detail: "Upload must be multipart form data." }, { status: 400 });
+  }
 
-  const responseBody = await response.text();
-
-  return new NextResponse(responseBody, {
-    status: response.status,
-    headers: {
-      "content-type": response.headers.get("content-type") ?? "application/json",
-    },
+  return proxyToBackend(`/patients/${encodeURIComponent(patientId)}/documents`, {
+    method: "POST",
+    body: formData,
+    timeoutMs: 60_000,
   });
 }

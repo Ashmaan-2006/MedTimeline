@@ -4,8 +4,36 @@ from uuid import UUID
 
 from medgraph_api.crud.document_chunks import DocumentChunkRepository
 from medgraph_api.core.observability import observe_span
+from medgraph_api.models.document_chunk import DocumentChunk
+from medgraph_api.services.clinical_text import iter_passages, rank_passages
 from medgraph_api.services.embeddings import HashingEmbeddingService
 from medgraph_api.services.retrieval_filters import RetrievalFilters
+
+CANDIDATE_POOL_MULTIPLIER = 4
+MIN_CANDIDATE_POOL = 20
+
+
+def rerank_chunks(chunks: list[DocumentChunk], query: str) -> list[DocumentChunk]:
+    """Order chunks by their best question-matching passage, with vector rank as a tiebreak."""
+    passages = [
+        passage
+        for index, chunk in enumerate(chunks)
+        for passage in iter_passages(
+            chunk.content,
+            initial_section=(chunk.chunk_metadata or {}).get("section"),
+            source_index=index,
+        )
+    ]
+    best_scores = [0.0] * len(chunks)
+    for passage in rank_passages(passages, query):
+        best_scores[passage.source_index] = max(best_scores[passage.source_index], passage.score)
+
+    def combined_score(index: int) -> float:
+        vector_score = (len(chunks) - index) / len(chunks)
+        return best_scores[index] + vector_score
+
+    order = sorted(range(len(chunks)), key=combined_score, reverse=True)
+    return [chunks[index] for index in order]
 
 
 @dataclass(frozen=True)
@@ -52,12 +80,15 @@ class PatientDocumentSimilaritySearchService:
             if not query_embedding.text:
                 return []
 
-            chunks = self.document_chunks.search_similar_for_patient(
+            # Pull a wider vector candidate pool, then rerank it lexically: the local hashing
+            # embedding misses chunks whose wording matches the question exactly.
+            candidates = self.document_chunks.search_similar_for_patient(
                 patient_id=patient_id,
                 query_embedding=query_embedding.embedding,
-                limit=limit,
+                limit=max(limit * CANDIDATE_POOL_MULTIPLIER, MIN_CANDIDATE_POOL),
                 filters=filters,
             )
+            chunks = rerank_chunks(candidates, query)[:limit]
             return [
                 PatientDocumentSearchResult(
                     chunk_id=chunk.id,

@@ -101,6 +101,7 @@ def test_vector_retrieval_node_populates_vector_context_from_similarity_search()
             "chunk_index": 3,
             "content": "Patient reported shortness of breath after metoprolol dose change.",
             "source_snippet": "Patient reported shortness of breath after metoprolol dose change.",
+            "relevant_snippet": "Patient reported shortness of breath after metoprolol dose change.",
             "similarity_score": 0.91,
             "embedding_model": "local-hashing-embedding-v1",
             "token_count": 9,

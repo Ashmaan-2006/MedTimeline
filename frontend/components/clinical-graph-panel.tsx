@@ -40,6 +40,8 @@ function formatDateTime(value: string | null) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
   }).format(new Date(value));
 }
 

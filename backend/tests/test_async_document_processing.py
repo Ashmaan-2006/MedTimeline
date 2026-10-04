@@ -84,6 +84,12 @@ class RecordingTimelineRepository:
         self.events.extend(payloads)
         return payloads
 
+    def delete_for_document(self, document_id: UUID) -> None:
+        self.events = [
+            event for event in self.events
+            if getattr(event, "source_document_id", None) != document_id
+        ]
+
 
 class StaticExtractionService:
     def extract_text(self, storage_path: str, content_type: str | None) -> str:

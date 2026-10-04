@@ -171,7 +171,8 @@ def test_patient_rag_query_endpoint_returns_cited_answer_from_retrieved_chunks()
         }
     ]
     assert document_chunks.last_patient_id == patient.id
-    assert document_chunks.last_limit == 2
+    # The request limit of 2 widens to a reranking candidate pool.
+    assert document_chunks.last_limit == 20
     assert document_chunks.last_query_embedding is not None
     assert len(document_chunks.last_query_embedding) == 384
     assert document_chunks.last_filters is not None

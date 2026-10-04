@@ -30,7 +30,7 @@ def test_chunk_text_normalizes_extracted_document_text() -> None:
     assert chunks[0].metadata == {"char_start": 0, "char_end": len(chunks[0].content)}
 
 
-def test_chunk_text_splits_on_sentence_boundaries_with_overlap() -> None:
+def test_chunk_text_starts_chunks_on_sentence_boundaries() -> None:
     text = (
         "Chest pain worsened over two weeks. "
         "Metoprolol was increased after clinic review. "
@@ -39,14 +39,33 @@ def test_chunk_text_splits_on_sentence_boundaries_with_overlap() -> None:
 
     chunks = TextChunkingService(max_chars=75, overlap_chars=20).chunk_text(text)
 
-    assert [chunk.chunk_index for chunk in chunks] == [0, 1, 2]
-    assert chunks[0].content == "Chest pain worsened over two weeks."
-    assert chunks[1].content == (
-        "over two weeks. Metoprolol was increased after clinic review."
+    # Chunks that end on a sentence boundary do not repeat a partial sentence.
+    assert [chunk.content for chunk in chunks] == [
+        "Chest pain worsened over two weeks.",
+        "Metoprolol was increased after clinic review.",
+        "Patient later reported dizziness and fatigue.",
+    ]
+
+
+def test_chunk_text_overlaps_from_sentence_start_when_split_mid_sentence() -> None:
+    text = "Troponin was negative. Chest pain worsened over two weeks while on metoprolol."
+
+    chunks = TextChunkingService(max_chars=50, overlap_chars=40).chunk_text(text)
+
+    assert chunks[0].content.startswith("Troponin was negative. Chest pain worsened")
+    assert not chunks[0].content.endswith(".")
+    assert chunks[1].content.startswith("Chest pain worsened")
+
+
+def test_chunk_text_records_section_heading_path() -> None:
+    text = "DISCHARGE PLAN\nNew Medications:\n" + "\n".join(
+        f"- Medication {index} 10 mg daily for the next several weeks" for index in range(20)
     )
-    assert chunks[2].content == "after clinic review. Patient later reported dizziness and fatigue."
-    assert chunks[1].metadata["char_start"] < chunks[0].metadata["char_end"]
-    assert chunks[2].metadata["char_start"] < chunks[1].metadata["char_end"]
+
+    chunks = TextChunkingService(max_chars=200, overlap_chars=50).chunk_text(text)
+
+    assert "section" not in chunks[0].metadata
+    assert chunks[1].metadata["section"] == "DISCHARGE PLAN > New Medications"
 
 
 def test_chunk_text_falls_back_to_word_boundaries() -> None:
@@ -71,3 +90,36 @@ def test_chunking_service_rejects_invalid_configuration() -> None:
 
     with pytest.raises(ValueError, match="smaller"):
         TextChunkingService(max_chars=100, overlap_chars=100)
+
+
+def test_chunk_text_terminates_when_break_falls_inside_overlap_window() -> None:
+    text = "A" * 990 + " short line\n" + ("word " * 400)
+
+    chunks = TextChunkingService(max_chars=1200, overlap_chars=150).chunk_text(text)
+
+    starts = [chunk.metadata["char_start"] for chunk in chunks]
+    assert starts == sorted(set(starts))
+    assert chunks[-1].metadata["char_end"] == len(chunks[-1].content) + starts[-1]
+
+
+@pytest.mark.parametrize("seed", range(25))
+def test_chunk_text_always_advances_and_covers_text(seed: int) -> None:
+    import random
+
+    rng = random.Random(seed)
+    pieces = []
+    for _ in range(rng.randint(50, 400)):
+        word = "x" * rng.randint(1, 60)
+        pieces.append(word + rng.choice([" ", " ", "\n", ". ", "! "]))
+    text = "".join(pieces)
+    service = TextChunkingService(max_chars=200, overlap_chars=50)
+
+    chunks = service.chunk_text(text)
+    normalized = service._normalize_text(text)
+
+    starts = [chunk.metadata["char_start"] for chunk in chunks]
+    assert starts == sorted(set(starts))
+    assert chunks[0].metadata["char_start"] == 0
+    assert chunks[-1].metadata["char_end"] == len(normalized)
+    for previous, current in zip(chunks, chunks[1:], strict=False):
+        assert current.metadata["char_start"] <= previous.metadata["char_end"]

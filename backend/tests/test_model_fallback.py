@@ -107,4 +107,8 @@ def test_answer_generation_falls_back_with_low_confidence(monkeypatch) -> None:
 
     assert answer["confidence"] == "low"
     assert "lower-confidence fallback answer" in answer["answer"].lower()
-    assert "answer_generation used fallback model" in answer["answer"]
+    assert "answer_generation used fallback model" not in answer["answer"]
+    assert any(
+        "answer_generation used fallback model" in limitation
+        for limitation in answer["limitations"]
+    )

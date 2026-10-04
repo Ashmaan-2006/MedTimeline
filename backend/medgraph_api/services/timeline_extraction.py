@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from medgraph_api.schemas.timeline_event import TimelineEventCreate
+from medgraph_api.services.clinical_text import is_heading, split_sentences, strip_list_marker
 
 
 class BasicTimelineEventExtractionService:
@@ -15,6 +16,10 @@ class BasicTimelineEventExtractionService:
         "encounter": ("admitted", "discharged", "follow up", "visit", "consult"),
     }
     DATE_PATTERN = re.compile(r"\b(?P<date>\d{4}-\d{2}-\d{2})\b")
+    DAY_MONTH_YEAR_PATTERN = re.compile(
+        r"\b(\d{1,2})-(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*-(\d{4})\b",
+        re.IGNORECASE,
+    )
 
     def extract_events(
         self,
@@ -45,9 +50,13 @@ class BasicTimelineEventExtractionService:
         return events
 
     def _split_sentences(self, text: str) -> list[str]:
-        normalized_text = " ".join(text.split())
-        sentences = re.split(r"(?<=[.!?])\s+", normalized_text)
-        return [sentence.strip() for sentence in sentences if sentence.strip()]
+        # Split per line so header fields and list items do not merge into one giant "event".
+        sentences = []
+        for line in text.splitlines():
+            if not line.strip() or is_heading(line):
+                continue
+            sentences.extend(split_sentences(strip_list_marker(line)))
+        return sentences
 
     def _classify_event_type(self, sentence: str) -> str | None:
         normalized_sentence = sentence.lower()
@@ -59,10 +68,16 @@ class BasicTimelineEventExtractionService:
 
     def _extract_date(self, sentence: str) -> datetime | None:
         match = self.DATE_PATTERN.search(sentence)
-        if match is None:
-            return None
+        if match is not None:
+            return datetime.fromisoformat(match.group("date")).replace(tzinfo=UTC)
 
-        return datetime.fromisoformat(match.group("date")).replace(tzinfo=UTC)
+        # Discharge summaries and lab tables write dates as 08-Oct-2015.
+        day_month_year = self.DAY_MONTH_YEAR_PATTERN.search(sentence)
+        if day_month_year is None:
+            return None
+        day, month, year = day_month_year.groups()
+        parsed = datetime.strptime(f"{day}-{month.title()}-{year}", "%d-%b-%Y")
+        return parsed.replace(tzinfo=UTC)
 
     def _build_title(self, sentence: str) -> str:
         title = sentence.strip()

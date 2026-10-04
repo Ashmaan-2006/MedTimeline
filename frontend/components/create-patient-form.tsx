@@ -82,16 +82,16 @@ export function CreatePatientForm({ onPatientCreated }: CreatePatientFormProps) 
         </label>
         <label>
           <span>First Name</span>
-          <input className="text-input" name="first_name" placeholder="Maya" type="text" />
+          <input className="text-input" name="first_name" placeholder="Kai" type="text" />
         </label>
         <label>
           <span>Last Name</span>
-          <input className="text-input" name="last_name" placeholder="Singh" type="text" />
+          <input className="text-input" name="last_name" placeholder="Cenat" type="text" />
         </label>
       </div>
       <label>
         <span>Sex</span>
-        <input className="text-input" name="sex" placeholder="female" type="text" />
+        <input className="text-input" name="sex" placeholder="Male" type="text" />
       </label>
       <label>
         <span>Notes</span>
